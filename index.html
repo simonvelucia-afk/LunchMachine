@@ -2248,8 +2248,9 @@ window.gantryWaitingPickup = false;
       } else if(G.timer<=0) { G.timer=10; }
 
     } else if(G.phase==='waitPickup') {
-      G.targetX = COL_X.pickup;
-      G.targetZ = zPickup;
+      // Boîte déposée — retour immédiat au stationnement
+      G.targetX = 0.02;
+      G.targetZ = zUp;
       if(!window.gantryWaitingPickup) { G.phase='toPark'; G.timer=10; }
 
     } else if(G.phase==='toPark') {
