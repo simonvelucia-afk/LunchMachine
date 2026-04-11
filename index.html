@@ -2026,7 +2026,7 @@ function showScreen(id) {
   renderTempStrips();
 }
 function goAdmin() {
-  // Si session CoHabitat active et rôle admin → accès direct sans PIN
+  // Si session CoHabitat active avec rôle admin → accès direct sans PIN
   if(lunchSession) {
     var role = lunchSession.profile.role;
     if(role === 'admin' || role === 'principal_admin') {
@@ -2034,7 +2034,7 @@ function goAdmin() {
       return;
     }
   }
-  // Sinon → écran PIN (pour accès local sans CoHabitat)
+  // Toujours proposer le PIN (mode local ET mode réseau)
   showScreen('screen-pin');
 }
 
@@ -2045,15 +2045,8 @@ function goAdmin() {
 function updateAdminBtn() {
   var btn = document.getElementById('btn-admin-home');
   if(!btn) return;
-  var isAdmin = lunchSession &&
-    (lunchSession.profile.role === 'admin' || lunchSession.profile.role === 'principal_admin');
-  // En mode local (pas de machine= dans l'URL) : toujours visible
-  // En mode réseau : visible seulement si admin CoHabitat connecté
-  if(!NET_MODE || isAdmin) {
-    btn.style.display = '';
-  } else {
-    btn.style.display = 'none';
-  }
+  // Toujours visible — le PIN ou la session CoHabitat admin protège l'accès
+  btn.style.display = '';
 }
 
 // ═══════════════════════════════
