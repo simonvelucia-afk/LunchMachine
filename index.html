@@ -625,7 +625,7 @@
       <div class="topbar-title" id="topbar-title-home"><span id="tth-main"></span> <span id="tth-sub" style="color:var(--accent);"></span></div>
       <div class="topbar-time" id="clock">--:--</div>
       <div id="lang-switcher" style="display:flex;gap:3px;"><button class="topbar-btn lang-btn" data-lang="fr" onclick="setLang('fr')">🇫🇷 FR</button><button class="topbar-btn lang-btn" data-lang="en" onclick="setLang('en')">🇬🇧 EN</button><button class="topbar-btn lang-btn" data-lang="es" onclick="setLang('es')">🇪🇸 ES</button></div>
-      <button class="topbar-btn" data-i18n="admin" onclick="goAdmin()">ADMIN</button>
+      <button class="topbar-btn" id="btn-admin-home" data-i18n="admin" onclick="goAdmin()" style="display:none;">ADMIN</button>
     </div>
     <div class="content">
       <!-- Machine image side -->
@@ -2020,7 +2020,36 @@ function showScreen(id) {
   }
   renderTempStrips();
 }
-function goAdmin() { showScreen('screen-pin'); }
+function goAdmin() {
+  // Si session CoHabitat active et rôle admin → accès direct sans PIN
+  if(lunchSession) {
+    var role = lunchSession.profile.role;
+    if(role === 'admin' || role === 'principal_admin') {
+      showScreen('screen-admin');
+      return;
+    }
+  }
+  // Sinon → écran PIN (pour accès local sans CoHabitat)
+  showScreen('screen-pin');
+}
+
+// Met à jour la visibilité du bouton ADMIN selon la session CoHabitat
+// Le bouton est visible si :
+//  - mode local (pas de ?machine= dans l'URL), OU
+//  - mode réseau ET l'utilisateur CoHabitat connecté est admin
+function updateAdminBtn() {
+  var btn = document.getElementById('btn-admin-home');
+  if(!btn) return;
+  var isAdmin = lunchSession &&
+    (lunchSession.profile.role === 'admin' || lunchSession.profile.role === 'principal_admin');
+  // En mode local (pas de machine= dans l'URL) : toujours visible
+  // En mode réseau : visible seulement si admin CoHabitat connecté
+  if(!NET_MODE || isAdmin) {
+    btn.style.display = '';
+  } else {
+    btn.style.display = 'none';
+  }
+}
 
 // ═══════════════════════════════
 //  TEMP STRIPS + ZONE OVERLAYS
@@ -2437,6 +2466,7 @@ async function doLunchLogin() {
 
     lunchSession = { profile, dependents: deps || [], token };
     resetLunchSessionTimer();
+    updateAdminBtn();
 
     // Passer à l'étape sélecteur
     showAuthStep('select');
@@ -2453,6 +2483,7 @@ function lunchLogout() {
   lunchSession = null;
   lunchSelectedPerson = null;
   clearTimeout(lunchSessionTimer);
+  updateAdminBtn();
   showAuthStep('login');
   updateSessionBanner();
 }
@@ -3647,6 +3678,7 @@ renderMachineZoneOverlays();
 renderHomeStats();
 renderMachineSlots();
 renderLangBtns();
+updateAdminBtn();
 
 // Mode réseau : charger depuis Supabase
 if(NET_MODE) {
