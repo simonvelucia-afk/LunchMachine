@@ -87,9 +87,9 @@
     display:flex; flex-direction:row; overflow:hidden;
   }
 
-  /* Left: machine photo */
+  /* Left: machine — plein écran home */
   .home-machine-side {
-    width:531px; flex-shrink:0; position:relative; overflow:hidden; height:calc(480px - 40px - 28px);
+    width:100%; flex-shrink:0; position:relative; overflow:hidden; height:calc(480px - 40px - 28px);
   }
   .home-machine-img { display:none; }
 
@@ -220,12 +220,12 @@
   }
 
   /* Slot inner content */
-  .slot-num { font-family:'Space Mono',monospace; font-size:10px; color:var(--text-faint); line-height:1; }
-  .slot-status { font-family:'Barlow Condensed',sans-serif; font-size:10px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; margin-top:2px; }
+  .slot-num { font-family:'Space Mono',monospace; font-size:12px; color:var(--text-faint); line-height:1; }
+  .slot-status { font-family:'Barlow Condensed',sans-serif; font-size:12px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; margin-top:2px; }
   .slot-status.libre { color:var(--success); }
   .slot-status.reservee { color:var(--accent); }
   .slot-status.vide { color:var(--text-faint); }
-  .slot-desc { font-size:9px; color:var(--text-dim); margin-top:2px; line-height:1.3; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+  .slot-desc { font-size:11px; color:var(--text-dim); margin-top:2px; line-height:1.3; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
 
   /* Animated color bar at bottom */
   .slot-temp-bar { position:absolute; bottom:0; left:0; right:0; height:3px; }
@@ -335,8 +335,30 @@
   .admin-nav-item { padding:10px 14px; font-family:'Barlow Condensed',sans-serif; font-size:13px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--text-dim); cursor:pointer; border-left:2px solid transparent; transition:all .15s; }
   .admin-nav-item:hover { color:var(--text); background:var(--surface2); }
   .admin-nav-item.active { color:var(--accent); border-left-color:var(--accent); background:#0e0e00; }
-  .admin-panel { flex:1; padding:14px; overflow-y:auto; display:none; }
+  .admin-panel { flex:1; padding:14px; overflow-y:auto; display:none; min-width:0; }
   .admin-panel.active { display:block; }
+  /* Panel gantry en split — flex row */
+  #panel-gantry.active { display:flex; flex-direction:row; padding:0; overflow:hidden; }
+  .gantry-controls-col { width:390px; flex-shrink:0; padding:12px 14px; overflow-y:auto; border-right:1px solid var(--border); }
+  .gantry-preview-col { flex:1; min-width:0; position:relative; background:#0a0a0a; overflow:hidden; display:flex; flex-direction:column; }
+  .gantry-preview-header { background:var(--surface); border-bottom:1px solid var(--border); padding:5px 10px; font-family:'Barlow Condensed',sans-serif; font-size:11px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--text-faint); display:flex; align-items:center; gap:8px; flex-shrink:0; }
+  .gantry-preview-header span { color:var(--accent); }
+  #gantry-live-view { flex:1; position:relative; overflow:hidden; }
+  /* Joystick touch amélioré */
+  .joypad { display:grid; grid-template-columns:44px 44px 44px; grid-template-rows:44px 44px 44px; gap:3px; }
+  .joypad-btn { background:var(--surface); border:1px solid var(--border); color:var(--text); font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all .1s; border-radius:3px; touch-action:none; user-select:none; }
+  .joypad-btn:active, .joypad-btn.pressing { background:var(--accent); color:#000; border-color:var(--accent); transform:scale(.93); }
+  .joypad-center { background:var(--bg); border:1px solid var(--border-active); cursor:default; }
+  /* Upload photo */
+  .photo-upload-zone { border:1px dashed var(--border-active); padding:10px; text-align:center; cursor:pointer; transition:border-color .15s; position:relative; }
+  .photo-upload-zone:hover { border-color:var(--accent); }
+  .photo-upload-zone input[type=file] { position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%; }
+  .photo-upload-label { font-family:'Barlow Condensed',sans-serif; font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--text-faint); pointer-events:none; }
+  /* Upload status */
+  .upload-status { font-family:'Space Mono',monospace; font-size:10px; margin-top:5px; min-height:14px; }
+  .upload-status.ok  { color:var(--success); }
+  .upload-status.err { color:var(--accent3); }
+  .upload-status.loading { color:var(--accent2); }
   .admin-section-title { font-family:'Barlow Condensed',sans-serif; font-size:14px; font-weight:900; letter-spacing:.1em; text-transform:uppercase; color:var(--text-dim); margin-bottom:12px; padding-bottom:6px; border-bottom:1px solid var(--border); }
   .admin-row { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
   .admin-label { font-size:12px; color:var(--text-dim); width:130px; flex-shrink:0; }
@@ -373,7 +395,170 @@
   /* ─── DEMO BADGE ─── */
   .demo-badge { display:inline-block; background:var(--accent2); color:#000; font-family:'Barlow Condensed',sans-serif; font-size:9px; font-weight:900; letter-spacing:.1em; padding:1px 5px; text-transform:uppercase; }
 
-  ::-webkit-scrollbar { width:4px; }
+  /* ═══════════════════════════════════════
+     FICHE DÉTAIL PLAT — modal plein écran
+  ═══════════════════════════════════════ */
+  #dish-modal { z-index:150; }
+  #dish-modal .dish-inner {
+    width:760px; height:440px; background:var(--surface);
+    border:1px solid var(--border-active);
+    display:flex; flex-direction:row; overflow:hidden;
+    animation:modalIn .2s ease;
+  }
+  /* Colonne gauche — photo */
+  .dish-photo-col {
+    width:280px; flex-shrink:0; position:relative; overflow:hidden;
+    background:#0a0a0a; display:flex; align-items:center; justify-content:center;
+  }
+  .dish-photo-col img {
+    width:100%; height:100%; object-fit:cover; display:block;
+  }
+  .dish-photo-placeholder {
+    display:flex; flex-direction:column; align-items:center; gap:8px;
+    opacity:.25;
+  }
+  .dish-photo-placeholder svg { width:64px; height:64px; }
+  .dish-photo-placeholder span {
+    font-family:'Barlow Condensed',sans-serif; font-size:11px;
+    letter-spacing:.1em; text-transform:uppercase; color:var(--text-dim);
+  }
+  .dish-price-badge {
+    position:absolute; bottom:12px; left:12px;
+    background:rgba(0,0,0,.75); border:1px solid var(--accent);
+    padding:5px 12px; backdrop-filter:blur(4px);
+    font-family:'Barlow Condensed',sans-serif; font-size:22px; font-weight:900;
+    color:var(--accent); letter-spacing:.05em;
+  }
+  .dish-zone-badge {
+    position:absolute; top:10px; left:10px;
+    padding:2px 8px; border:1px solid; backdrop-filter:blur(4px);
+    background:rgba(0,0,0,.6);
+    font-family:'Barlow Condensed',sans-serif; font-size:10px; font-weight:700;
+    letter-spacing:.1em; text-transform:uppercase;
+  }
+  /* Colonne droite — infos */
+  .dish-info-col {
+    flex:1; min-width:0; display:flex; flex-direction:column; overflow:hidden;
+  }
+  .dish-header {
+    padding:14px 16px 10px; border-bottom:1px solid var(--border); flex-shrink:0;
+    display:flex; align-items:flex-start; justify-content:space-between; gap:10px;
+  }
+  .dish-title {
+    font-family:'Barlow Condensed',sans-serif; font-size:20px; font-weight:900;
+    letter-spacing:.04em; color:var(--text); line-height:1.15; flex:1;
+  }
+  .dish-case-num {
+    font-family:'Space Mono',monospace; font-size:11px; color:var(--text-faint);
+    flex-shrink:0; padding-top:3px;
+  }
+  .dish-body {
+    flex:1; overflow-y:auto; padding:12px 16px; display:flex; flex-direction:column; gap:10px;
+  }
+  /* Macros strip */
+  .dish-macros {
+    display:flex; gap:6px; flex-shrink:0;
+  }
+  .dish-macro {
+    flex:1; background:var(--bg); border:1px solid var(--border);
+    padding:5px 6px; display:flex; flex-direction:column; align-items:center; gap:1px;
+  }
+  .dish-macro-val {
+    font-family:'Space Mono',monospace; font-size:13px; font-weight:700; color:var(--accent);
+  }
+  .dish-macro-lbl {
+    font-family:'Barlow Condensed',sans-serif; font-size:9px; font-weight:700;
+    letter-spacing:.08em; text-transform:uppercase; color:var(--text-faint);
+  }
+  .dish-macro.kcal .dish-macro-val { color:#e8a547; }
+  .dish-macro.prot .dish-macro-val { color:#5de88c; }
+  .dish-macro.gluc .dish-macro-val { color:#4fa3e8; }
+  .dish-macro.lipi .dish-macro-val { color:#b47fe8; }
+  /* Section labels */
+  .dish-section-lbl {
+    font-family:'Barlow Condensed',sans-serif; font-size:10px; font-weight:700;
+    letter-spacing:.12em; text-transform:uppercase; color:var(--text-faint);
+    margin-bottom:4px; display:flex; align-items:center; gap:6px;
+  }
+  .dish-section-lbl::after { content:''; flex:1; height:1px; background:var(--border); }
+  .dish-ingredients {
+    font-size:12px; color:var(--text-dim); line-height:1.55;
+  }
+  /* Allergènes pills */
+  .dish-allergens { display:flex; flex-wrap:wrap; gap:5px; }
+  .dish-allergen-pill {
+    background:rgba(232,80,71,.12); border:1px solid rgba(232,80,71,.35);
+    color:#e85047; font-family:'Barlow Condensed',sans-serif;
+    font-size:10px; font-weight:700; letter-spacing:.07em; text-transform:uppercase;
+    padding:2px 7px; border-radius:1px;
+  }
+  /* Méta (chef, date) */
+  .dish-meta {
+    display:flex; gap:14px; flex-wrap:wrap;
+  }
+  .dish-meta-item {
+    display:flex; flex-direction:column; gap:1px;
+  }
+  .dish-meta-key {
+    font-family:'Barlow Condensed',sans-serif; font-size:9px; font-weight:700;
+    letter-spacing:.1em; text-transform:uppercase; color:var(--text-faint);
+  }
+  .dish-meta-val {
+    font-family:'Space Mono',monospace; font-size:11px; color:var(--text);
+  }
+  /* Footer */
+  .dish-footer {
+    padding:10px 16px; border-top:1px solid var(--border);
+    display:flex; gap:8px; justify-content:flex-end; flex-shrink:0;
+  }
+
+  /* ── Admin étendu : scroll interne du panel cases ── */
+  #panel-cases { overflow-y:auto; }
+  .admin-field-group {
+    background:var(--bg); border:1px solid var(--border);
+    padding:8px 10px; margin-bottom:6px;
+  }
+  .admin-field-label {
+    font-family:'Barlow Condensed',sans-serif; font-size:10px; font-weight:700;
+    letter-spacing:.1em; text-transform:uppercase; color:var(--text-faint);
+    margin-bottom:4px;
+  }
+  .admin-field-input {
+    width:100%; background:var(--surface); border:1px solid var(--border);
+    color:var(--text); font-family:'Barlow',sans-serif; font-size:12px;
+    padding:5px 8px; outline:none;
+  }
+  .admin-field-input:focus { border-color:var(--accent); }
+  .admin-macro-row { display:flex; gap:6px; align-items:center; }
+  .admin-macro-row input {
+    width:64px; background:var(--surface); border:1px solid var(--border);
+    color:var(--text); font-family:'Space Mono',monospace; font-size:12px;
+    padding:4px 6px; outline:none; text-align:center;
+  }
+  .admin-macro-row input:focus { border-color:var(--accent); }
+  .admin-macro-lbl {
+    font-family:'Barlow Condensed',sans-serif; font-size:10px; font-weight:700;
+    letter-spacing:.07em; text-transform:uppercase; color:var(--text-faint); min-width:28px;
+  }
+  .admin-photo-preview {
+    width:100%; height:80px; object-fit:cover; display:block;
+    border:1px solid var(--border); margin-bottom:6px; background:#0a0a0a;
+  }
+  /* Allergènes checkboxes */
+  .allergen-grid { display:flex; flex-wrap:wrap; gap:5px; }
+  .allergen-check {
+    display:flex; align-items:center; gap:4px; cursor:pointer;
+    padding:3px 7px; border:1px solid var(--border); background:var(--surface);
+    transition:all .12s; user-select:none;
+  }
+  .allergen-check input { display:none; }
+  .allergen-check.checked {
+    border-color:#e85047; background:rgba(232,80,71,.1); color:#e85047;
+  }
+  .allergen-check span {
+    font-family:'Barlow Condensed',sans-serif; font-size:11px;
+    font-weight:700; letter-spacing:.06em; text-transform:uppercase;
+  }
   ::-webkit-scrollbar-track { background:transparent; }
   ::-webkit-scrollbar-thumb { background:var(--border-active); border-radius:2px; }
 
@@ -389,7 +574,44 @@
   @keyframes wash-glow { 0%,100%{opacity:0.3} 50%{opacity:0.7} }
   @keyframes gantry-idle-x { 0%,100%{transform:translateX(0)} 50%{transform:translateX(8px)} }
   @keyframes gantry-idle-z { 0%,100%{transform:translateY(0)} 50%{transform:translateY(4px)} }
+  @keyframes gantry-spark { 0%{opacity:1;transform:scale(1)} 100%{opacity:0;transform:scale(2.5)} }
+  @keyframes gantry-trail-fade { 0%{opacity:0.55} 100%{opacity:0} }
+  @keyframes pickup-pulse { 0%,100%{box-shadow:0 0 6px rgba(93,232,140,.3),inset 0 0 10px rgba(93,232,140,.08)} 50%{box-shadow:0 0 18px rgba(93,232,140,.7),inset 0 0 20px rgba(93,232,140,.18)} }
+  @keyframes pickup-arrive { 0%{opacity:0;transform:scale(.85)} 60%{transform:scale(1.04)} 100%{opacity:1;transform:scale(1)} }
   #gantry-overlay { z-index:1; }
+
+  /* Trail dots */
+  .g-trail { position:absolute; width:4px; height:4px; border-radius:50%; pointer-events:none; animation:gantry-trail-fade 0.35s ease-out forwards; }
+  /* Spark burst */
+  .g-spark { position:absolute; width:8px; height:8px; border-radius:50%; pointer-events:none; animation:gantry-spark 0.4s ease-out forwards; }
+  /* Pickup zone active glow */
+  #pickup-col-active { animation:pickup-pulse 1.4s ease-in-out infinite; }
+  /* Gripper LED glow when carrying */
+  .gr-led-carry { transition:fill .2s, filter .2s; }
+
+  /* PICKUP ZONE — repositionnée en bas de la col cueillette, plus visible */
+  #pickup-zone-upgraded {
+    position:absolute; bottom:6px; left:4px; right:4px;
+    background:#0a1f0a; border:1px solid #2a5a2a; border-radius:3px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:3px; padding:6px 4px; z-index:5;
+    animation:pickup-arrive .3s ease;
+  }
+  #pickup-zone-upgraded .pzu-num {
+    font-family:'Space Mono',monospace; font-size:18px; font-weight:700;
+    color:#5de88c; letter-spacing:.1em;
+  }
+  #pickup-zone-upgraded .pzu-label {
+    font-family:'Barlow Condensed',sans-serif; font-size:9px; font-weight:700;
+    letter-spacing:.12em; text-transform:uppercase; color:#3a8a3a;
+  }
+  #pickup-zone-upgraded .pzu-btn {
+    width:100%; background:#0d2a0d; border:1px solid #3a7a3a; color:#5de88c;
+    font-family:'Barlow Condensed',sans-serif; font-size:10px; font-weight:700;
+    letter-spacing:.08em; text-transform:uppercase; padding:5px 4px;
+    cursor:pointer; border-radius:2px; transition:background .15s;
+  }
+  #pickup-zone-upgraded .pzu-btn:hover { background:#1a3a1a; }
 </style>
 </head>
 <body>
@@ -600,6 +822,10 @@
           <stop offset="0%" stop-color="#9ab" stop-opacity="0.85"/>
           <stop offset="100%" stop-color="#678" stop-opacity="0.6"/>
         </linearGradient>
+        <filter id="gr-glow" x="-80%" y="-80%" width="260%" height="260%">
+          <feGaussianBlur stdDeviation="3" result="blur"/>
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
       </defs>
 
       <!-- ── RAIL X TOP (fixed) ── -->
@@ -641,7 +867,7 @@
           <circle cx="5" cy="-2" r="1.8" fill="#111" stroke="#555" stroke-width="0.4"/>
           <!-- Gripper head -->
           <rect x="-10" y="5" width="20" height="9" rx="2" fill="#1e1e1e" stroke="#3a3a3a" stroke-width="0.5"/>
-          <circle cx="0" cy="9" r="1.5" fill="#4fa3e8" opacity="0.85"/>
+          <circle id="gr-led" cx="0" cy="9" r="2.5" fill="#e8c547" opacity="0.9"/>
           <!-- Left finger -->
           <rect id="gr-finger-l" x="-9" y="13" width="6" height="11" rx="2" fill="#111" stroke="#2a2a2a" stroke-width="0.4"/>
           <!-- Right finger -->
@@ -665,24 +891,6 @@
 
   <div id="machine-zone-overlays" style="display:none;"></div>
 </div>
-<!-- CTA side -->
-      <div class="home-cta-side">
-        <div>
-          <div class="home-title" data-i18n="homeTitle" data-i18n-html="1">Votre <span>repas</span><br>vous attend.</div>
-          <div class="home-subtitle" style="margin-top:8px;" data-i18n="homeSubtitle" data-i18n-html="1">Sélectionnez une action pour accéder<br>aux cases réfrigérées et tempérées.</div>
-        </div>
-        <div class="home-stats" id="home-stats"></div>
-        <div class="home-btns">
-          <button class="btn-big primary" onclick="showScreen('screen-grid')">
-            <div class="btn-icon">🍱</div>
-            <div class="btn-texts">
-              <div data-i18n="btnBuy">Acheter une case</div>
-              <div class="btn-sub" data-i18n="btnBuySub">Sélectionner et confirmer</div>
-            </div>
-            <div class="btn-arrow">›</div>
-          </button>
-        </div>
-      </div>
     </div>
   </div>
 
@@ -743,6 +951,7 @@
         <div class="admin-nav-item active" onclick="adminNav('cases')" id="nav-cases" data-i18n="navCases">Cases</div>
         <div class="admin-nav-item" onclick="adminNav('temperatures')" id="nav-temperatures" data-i18n="navTemps">Températures</div>
         <div class="admin-nav-item" onclick="adminNav('config')" id="nav-config" data-i18n="navConfig">Configuration</div>
+        <div class="admin-nav-item" onclick="adminNav('gantry')" id="nav-gantry">Gantry</div>
         <div class="admin-nav-item" onclick="adminNav('status')" id="nav-status" data-i18n="navStatus">Statuts</div>
       </div>
       <div class="admin-panel active" id="panel-cases">
@@ -759,27 +968,87 @@
         </div>
         <div id="admin-slots-grid" class="admin-slots-grid"></div>
         <div class="admin-slot-edit" id="admin-slot-edit">
-          <div class="admin-row">
+          <div class="admin-row" style="margin-bottom:8px;">
             <div class="admin-label">Case sélectionnée</div>
             <span id="edit-slot-label" style="font-family:'Space Mono',monospace;font-size:12px;color:var(--accent)"></span>
           </div>
-          <div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:8px;">
+
+          <!-- Ligne 1 : description + prix -->
+          <div style="display:flex;gap:8px;margin-bottom:6px;">
             <div style="flex:1;">
-              <div class="admin-label" style="margin-bottom:5px;">Description du contenu :</div>
-              <div class="admin-desc-display" id="admin-desc-display">—</div>
-              <textarea class="admin-textarea" id="admin-slot-desc" placeholder="Ex: Poulet rôti, légumes grillés, riz basmati..."></textarea>
+              <div class="admin-field-label">Nom du plat / description</div>
+              <textarea class="admin-field-input" id="admin-slot-desc" rows="2" placeholder="Ex: Poulet rôti, légumes grillés, riz basmati..."></textarea>
             </div>
-            <div style="width:100px;flex-shrink:0;">
-              <div class="admin-label" style="margin-bottom:5px;">Prix :</div>
-              <div style="display:flex;align-items:center;gap:5px;">
-                <input class="admin-input" type="number" id="admin-slot-price" min="0" step="0.25" style="width:70px;" placeholder="0.00">
-                <span class="admin-unit">$</span>
-              </div>
-              <div style="font-size:9px;color:var(--text-faint);margin-top:4px;line-height:1.4;">Prix affiché<br>à l'achat</div>
+            <div style="width:90px;flex-shrink:0;">
+              <div class="admin-field-label">Prix ($)</div>
+              <input class="admin-field-input" type="number" id="admin-slot-price" min="0" step="0.25" placeholder="0.00" style="width:100%;"/>
             </div>
           </div>
+
+          <!-- Ligne 2 : photo URL + chef + date -->
+          <div style="display:flex;gap:8px;margin-bottom:6px;">
+            <div style="flex:1;">
+              <div class="admin-field-label">Photo du plat</div>
+              <!-- Zone upload fichier -->
+              <div class="photo-upload-zone" id="photo-upload-zone" onclick="document.getElementById('photo-file-input').click()">
+                <input type="file" id="photo-file-input" accept="image/*" capture="environment" onchange="handlePhotoFile(event)" style="display:none;">
+                <div class="photo-upload-label">📷 Prendre une photo ou choisir un fichier</div>
+                <div style="font-size:9px;color:var(--text-faint);margin-top:2px;">JPG, PNG — sera uploadé sur GitHub</div>
+              </div>
+              <div id="photo-upload-status" class="upload-status"></div>
+              <!-- Ou URL manuelle -->
+              <div style="font-family:'Barlow Condensed',sans-serif;font-size:9px;color:var(--text-faint);letter-spacing:.06em;text-transform:uppercase;margin:5px 0 3px;">— OU entrer le nom de fichier —</div>
+              <div style="font-size:9px;color:var(--text-faint);margin-bottom:3px;font-family:monospace;">raw.githubusercontent.com/simonvelucia-afk/LunchMachine-images/main/</div>
+              <div style="display:flex;gap:5px;align-items:center;">
+                <input class="admin-field-input" type="text" id="admin-slot-photo" placeholder="poulet-roti.jpg" style="flex:1;"/>
+                <button class="btn" onclick="previewPhoto()" style="font-size:11px;padding:4px 8px;flex-shrink:0;">Aperçu</button>
+              </div>
+              <img id="admin-photo-preview" class="admin-photo-preview" src="" alt="" style="display:none;margin-top:4px;"/>
+            </div>
+            <div style="width:130px;flex-shrink:0;display:flex;flex-direction:column;gap:6px;">
+              <div>
+                <div class="admin-field-label">Chef / cuisinier</div>
+                <input class="admin-field-input" type="text" id="admin-slot-chef" placeholder="Prénom Nom" style="width:100%;"/>
+              </div>
+              <div>
+                <div class="admin-field-label">Date de préparation</div>
+                <input class="admin-field-input" type="date" id="admin-slot-date" style="width:100%;"/>
+              </div>
+            </div>
+          </div>
+
+          <!-- Ligne 3 : ingrédients -->
+          <div style="margin-bottom:6px;">
+            <div class="admin-field-label">Ingrédients (liste complète pour traçabilité)</div>
+            <textarea class="admin-field-input" id="admin-slot-ingredients" rows="2" placeholder="Poulet (200g), huile d'olive, ail, romarin, sel, poivre..."></textarea>
+          </div>
+
+          <!-- Ligne 4 : macros -->
+          <div style="margin-bottom:6px;">
+            <div class="admin-field-label">Valeurs nutritives (par portion)</div>
+            <div class="admin-macro-row">
+              <div class="admin-macro-lbl">kcal</div>
+              <input type="number" id="admin-slot-calories" min="0" placeholder="0"/>
+              <div class="admin-macro-lbl" style="margin-left:8px;">Prot.</div>
+              <input type="number" id="admin-slot-proteines" min="0" placeholder="0"/>
+              <div class="admin-macro-lbl" style="color:var(--text-faint);font-size:9px;">g</div>
+              <div class="admin-macro-lbl" style="margin-left:8px;">Gluc.</div>
+              <input type="number" id="admin-slot-glucides" min="0" placeholder="0"/>
+              <div class="admin-macro-lbl" style="color:var(--text-faint);font-size:9px;">g</div>
+              <div class="admin-macro-lbl" style="margin-left:8px;">Lip.</div>
+              <input type="number" id="admin-slot-lipides" min="0" placeholder="0"/>
+              <div class="admin-macro-lbl" style="color:var(--text-faint);font-size:9px;">g</div>
+            </div>
+          </div>
+
+          <!-- Ligne 5 : allergènes -->
+          <div style="margin-bottom:10px;">
+            <div class="admin-field-label">Allergènes</div>
+            <div class="allergen-grid" id="allergen-grid"></div>
+          </div>
+
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <button class="btn accent" onclick="saveSlotDesc()">Sauvegarder</button>
+            <button class="btn accent" onclick="saveSlotDesc()">💾 Sauvegarder</button>
             <button class="btn" onclick="clearSlotDesc()">Vider la case</button>
             <button class="btn accent3" onclick="cancelReservation()">Annuler réservation</button>
           </div>
@@ -806,6 +1075,14 @@
           <div class="admin-unit">boîtes</div>
         </div>
         <button class="btn accent" style="margin-bottom:12px;" onclick="saveBoxConfig()">Appliquer</button>
+        <div style="margin-top:12px;" class="admin-section-title">GitHub — Upload photos</div>
+        <div style="font-size:10px;color:var(--text-faint);margin-bottom:8px;line-height:1.5;">Token PAT avec permission <code style="color:var(--accent2);">contents:write</code> sur le repo <code style="color:var(--accent);">LunchMachine-images</code>.<br>Générer sur github.com → Settings → Developer settings → Personal access tokens.</div>
+        <div class="admin-row">
+          <div class="admin-label">Token PAT</div>
+          <input class="admin-input" type="password" id="github-token-input" style="width:180px;font-size:10px;" placeholder="ghp_xxxxxxxxxxxx">
+          <button class="btn" onclick="saveGitHubToken()">Sauver</button>
+        </div>
+        <div id="github-token-status" style="font-family:'Space Mono',monospace;font-size:10px;color:var(--text-faint);margin-left:140px;margin-bottom:8px;"></div>
         <div class="admin-section-title">Sécurité</div>
         <div class="admin-row">
           <div class="admin-label">Code PIN admin</div>
@@ -813,6 +1090,86 @@
           <button class="btn" onclick="savePin()">Changer</button>
         </div>
       </div>
+      <div class="admin-panel" id="panel-gantry">
+        <!-- COL GAUCHE : contrôles -->
+        <div class="gantry-controls-col">
+          <div class="admin-section-title" style="margin-bottom:10px;">Contrôle Gantry</div>
+
+          <!-- Mode toggle -->
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;padding:8px;background:var(--bg);border:1px solid var(--border);">
+            <button id="gantry-mode-auto" onclick="setGantryMode('auto')" class="btn accent" style="font-size:11px;padding:4px 10px;">⚙ AUTO</button>
+            <button id="gantry-mode-manual" onclick="setGantryMode('manual')" class="btn" style="font-size:11px;padding:4px 10px;">✋ MANUEL</button>
+            <div id="gantry-mode-label" style="font-family:'Space Mono',monospace;font-size:10px;color:var(--accent);">AUTO</div>
+          </div>
+
+          <!-- État -->
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;padding:7px;background:var(--bg);border:1px solid var(--border);">
+            <div><div style="font-size:9px;color:var(--text-faint);font-family:'Barlow Condensed',sans-serif;letter-spacing:.08em;text-transform:uppercase;">Phase</div><div id="gm-phase" style="font-family:'Space Mono',monospace;font-size:11px;color:var(--accent);">—</div></div>
+            <div><div style="font-size:9px;color:var(--text-faint);font-family:'Barlow Condensed',sans-serif;letter-spacing:.08em;text-transform:uppercase;">X</div><div id="gm-x" style="font-family:'Space Mono',monospace;font-size:11px;color:var(--text);">—</div></div>
+            <div><div style="font-size:9px;color:var(--text-faint);font-family:'Barlow Condensed',sans-serif;letter-spacing:.08em;text-transform:uppercase;">Z</div><div id="gm-z" style="font-family:'Space Mono',monospace;font-size:11px;color:var(--text);">—</div></div>
+            <div><div style="font-size:9px;color:var(--text-faint);font-family:'Barlow Condensed',sans-serif;letter-spacing:.08em;text-transform:uppercase;">Charge</div><div id="gm-carry" style="font-family:'Space Mono',monospace;font-size:11px;">—</div></div>
+          </div>
+
+          <!-- Contrôle manuel -->
+          <div id="gantry-manual-panel" style="display:none;">
+            <!-- Joypad + actions côte à côte -->
+            <div style="display:flex;gap:14px;align-items:flex-start;margin-bottom:10px;">
+              <!-- Joypad -->
+              <div>
+                <div style="font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text-faint);margin-bottom:5px;">DÉPLACEMENT</div>
+                <div class="joypad">
+                  <div></div>
+                  <button class="joypad-btn" id="jbtn-up"    onpointerdown="startManualMove('up')"    onpointerup="stopManualMove()" onpointerleave="stopManualMove()">▲</button>
+                  <div></div>
+                  <button class="joypad-btn" id="jbtn-left"  onpointerdown="startManualMove('left')"  onpointerup="stopManualMove()" onpointerleave="stopManualMove()">◀</button>
+                  <div class="joypad-btn joypad-center" style="font-size:9px;color:var(--text-faint);">XZ</div>
+                  <button class="joypad-btn" id="jbtn-right" onpointerdown="startManualMove('right')" onpointerup="stopManualMove()" onpointerleave="stopManualMove()">▶</button>
+                  <div></div>
+                  <button class="joypad-btn" id="jbtn-down"  onpointerdown="startManualMove('down')"  onpointerup="stopManualMove()" onpointerleave="stopManualMove()">▼</button>
+                  <div></div>
+                </div>
+                <!-- Vitesse -->
+                <div style="display:flex;align-items:center;gap:6px;margin-top:6px;">
+                  <span style="font-size:9px;color:var(--text-faint);font-family:'Barlow Condensed',sans-serif;letter-spacing:.06em;text-transform:uppercase;">Vitesse</span>
+                  <input type="range" id="gantry-speed" min="1" max="10" value="5" style="flex:1;accent-color:var(--accent);" oninput="updateManualSpeed(this.value)">
+                  <span id="gantry-speed-val" style="font-family:'Space Mono',monospace;font-size:10px;color:var(--accent);width:14px;">5</span>
+                </div>
+              </div>
+              <!-- Actions -->
+              <div style="display:flex;flex-direction:column;gap:5px;">
+                <div style="font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text-faint);margin-bottom:2px;">ACTIONS</div>
+                <button class="btn accent"  onclick="manualGrab()"          style="font-size:11px;padding:5px 10px;">⟳ SAISIR</button>
+                <button class="btn"         onclick="manualRelease()"        style="font-size:11px;padding:5px 10px;">⬇ DÉPOSER</button>
+                <button class="btn accent2" onclick="manualHome()"           style="font-size:11px;padding:5px 10px;">⌂ HOME</button>
+                <button class="btn accent3" onclick="manualEmergencyStop()"  style="font-size:11px;padding:5px 10px;background:rgba(232,80,71,.12);">⛔ STOP</button>
+              </div>
+            </div>
+
+            <!-- Positions rapides -->
+            <div style="font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text-faint);margin-bottom:5px;">POSITIONS RAPIDES</div>
+            <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px;">
+              <button class="btn" onclick="manualGoto(0.02,0)"    style="font-size:10px;padding:4px 8px;">⌂ Parking</button>
+              <button class="btn" onclick="manualGoto(0.268,null)" style="font-size:10px;padding:4px 8px;">📦 Pickup</button>
+              <button class="btn" onclick="manualGoto(0.551,null)" style="font-size:10px;padding:4px 8px;">Z1</button>
+              <button class="btn" onclick="manualGoto(0.849,null)" style="font-size:10px;padding:4px 8px;">Z2</button>
+            </div>
+          </div>
+
+          <!-- File d'attente -->
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text-faint);margin-bottom:4px;">FILE D'ATTENTE</div>
+          <div id="gantry-queue-list" style="font-family:'Space Mono',monospace;font-size:10px;color:var(--text-dim);min-height:18px;padding:5px;background:var(--bg);border:1px solid var(--border);white-space:pre-line;">Vide</div>
+          <button class="btn accent3" onclick="clearGantryQueue()" style="font-size:10px;padding:3px 8px;margin-top:5px;">Vider la file</button>
+        </div>
+
+        <!-- COL DROITE : preview live gantry -->
+        <div class="gantry-preview-col">
+          <div class="gantry-preview-header">
+            GANTRY LIVE <span id="gantry-preview-mode-badge">AUTO</span>
+          </div>
+          <div id="gantry-live-view"></div>
+        </div>
+      </div>
+
       <div class="admin-panel" id="panel-status">
         <div class="admin-section-title">Vue d'ensemble</div>
         <div id="status-content"></div>
@@ -871,6 +1228,70 @@
   </div>
 
   <!-- SUCCESS -->
+  <!-- FICHE DÉTAIL PLAT -->
+  <div class="modal-overlay" id="dish-modal">
+    <div class="dish-inner">
+      <!-- Colonne photo -->
+      <div class="dish-photo-col" id="dish-photo-col">
+        <div class="dish-photo-placeholder" id="dish-photo-placeholder">
+          <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="6" y="14" width="52" height="38" rx="4" stroke="currentColor" stroke-width="2"/>
+            <circle cx="22" cy="28" r="5" stroke="currentColor" stroke-width="2"/>
+            <path d="M6 42 L18 30 L28 40 L38 28 L58 44" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+          </svg>
+          <span>Aucune photo</span>
+        </div>
+        <img id="dish-photo-img" src="" alt="" style="display:none;"/>
+        <div class="dish-zone-badge" id="dish-zone-badge"></div>
+        <div class="dish-price-badge" id="dish-price-badge"></div>
+      </div>
+      <!-- Colonne info -->
+      <div class="dish-info-col">
+        <div class="dish-header">
+          <div class="dish-title" id="dish-title">—</div>
+          <div class="dish-case-num" id="dish-case-num"></div>
+        </div>
+        <div class="dish-body" id="dish-body">
+          <!-- Macros -->
+          <div class="dish-macros" id="dish-macros">
+            <div class="dish-macro kcal">
+              <div class="dish-macro-val" id="dm-kcal">—</div>
+              <div class="dish-macro-lbl">kcal</div>
+            </div>
+            <div class="dish-macro prot">
+              <div class="dish-macro-val" id="dm-prot">—</div>
+              <div class="dish-macro-lbl">Protéines</div>
+            </div>
+            <div class="dish-macro gluc">
+              <div class="dish-macro-val" id="dm-gluc">—</div>
+              <div class="dish-macro-lbl">Glucides</div>
+            </div>
+            <div class="dish-macro lipi">
+              <div class="dish-macro-val" id="dm-lipi">—</div>
+              <div class="dish-macro-lbl">Lipides</div>
+            </div>
+          </div>
+          <!-- Méta -->
+          <div class="dish-meta" id="dish-meta"></div>
+          <!-- Ingrédients -->
+          <div id="dish-ingr-block">
+            <div class="dish-section-lbl">Ingrédients</div>
+            <div class="dish-ingredients" id="dish-ingredients">—</div>
+          </div>
+          <!-- Allergènes -->
+          <div id="dish-allerg-block">
+            <div class="dish-section-lbl">Allergènes</div>
+            <div class="dish-allergens" id="dish-allergens"></div>
+          </div>
+        </div>
+        <div class="dish-footer">
+          <button class="btn" onclick="closeDishModal()">Fermer</button>
+          <button class="btn accent" id="dish-buy-btn" style="font-size:15px;padding:8px 22px;">Acheter ›</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="success-flash" id="success-flash">
     <div class="sf-icon" id="sf-icon">✓</div>
     <div class="sf-msg" id="sf-msg">Achat confirmé</div>
@@ -1201,7 +1622,9 @@ function defaultState() {
   let num = 1;
   ZONE_IDS.forEach(id => {
     for(let i=0;i<zones[id].count;i++)
-      slots.push({ id:num++, zone:id, desc:'', price:0, reserved:false, reservedBy:'' });
+      slots.push({ id:num++, zone:id, desc:'', price:0, reserved:false, reservedBy:'',
+        photo:'', chef:'', prepDate:'', ingredients:'',
+        allergens:[], calories:0, proteines:0, glucides:0, lipides:0 });
   });
   // Global color ranges — blue, violet, orange, red (in order)
   const colorRanges = {
@@ -1249,8 +1672,19 @@ function loadState() {
       // Migrate boxCount/boxMax
       if(parsed.boxMax === undefined) parsed.boxMax = def.boxMax;
       if(parsed.boxCount === undefined) parsed.boxCount = def.boxMax;
-      // Migrate slots: add price if missing
-      if(parsed.slots) parsed.slots.forEach(s => { if(s.price === undefined) s.price = 0; });
+      // Migrate slots: add price if missing + nouveaux champs fiche détail
+      if(parsed.slots) parsed.slots.forEach(s => {
+        if(s.price === undefined) s.price = 0;
+        if(s.photo === undefined) s.photo = '';
+        if(s.chef === undefined) s.chef = '';
+        if(s.prepDate === undefined) s.prepDate = '';
+        if(s.ingredients === undefined) s.ingredients = '';
+        if(s.allergens === undefined) s.allergens = [];
+        if(s.calories === undefined) s.calories = 0;
+        if(s.proteines === undefined) s.proteines = 0;
+        if(s.glucides === undefined) s.glucides = 0;
+        if(s.lipides === undefined) s.lipides = 0;
+      });
       return parsed;
     }
   } catch(e) {}
@@ -1277,11 +1711,13 @@ setInterval(updateClock,1000); updateClock();
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
-  if(id === 'screen-grid') {
-    renderGrid();
-  }
+  if(id === 'screen-grid') { renderGrid(); }
   if(id === 'screen-admin') renderAdmin();
-  if(id === 'screen-home') { renderHomeStats(); renderMachineSlots(); }
+  if(id === 'screen-home') {
+    _restoreMachineToHome();
+    renderHomeStats();
+    renderMachineSlots();
+  }
   renderTempStrips();
 }
 function goAdmin() { showScreen('screen-pin'); }
@@ -1363,38 +1799,42 @@ function renderMachineSlots() {
 
 
 
-    // Slider
-    var visCount = 4;
-    var maxScroll = Math.max(0, slots.length - visCount);
+    // Slider — caché car le scroll natif du conteneur gère la navigation
+    var visCount = slots.length; // tous les slots visibles, scroll CSS gère
+    var maxScroll = 0;
     var wrap = document.getElementById('slider-z' + num + '-wrap');
-    if(wrap) wrap.style.display = maxScroll > 0 ? '' : 'none';
-    var cur = window['_zoneOffset_' + panel] || 0;
-    if(cur > maxScroll) { cur = maxScroll; window['_zoneOffset_' + panel] = cur; }
+    if(wrap) wrap.style.display = 'none';
+    var cur = 0;
     var posEl = document.getElementById('slider-z' + num + '-pos');
-    if(posEl) posEl.textContent = maxScroll > 0 ? (cur+1)+'/'+(slots.length) : '';
-    var visible = slots.slice(cur, cur + visCount);
+    if(posEl) posEl.textContent = '';
+    var visible = slots;
 
     panelEl.innerHTML = '';
+    // Container: scroll vertical si déborde
+    panelEl.style.overflowY = 'auto';
+    panelEl.style.flexDirection = 'column';
+    panelEl.style.gap = '2px';
     visible.forEach(function(slot) {
       var has = !!slot.desc;
       var div = document.createElement('div');
-      div.style.cssText = 'flex:1;min-height:0;border:1px solid ' + (has ? color+'55' : '#1a1a2a') + ';background:' + (has ? color+'12' : 'rgba(0,0,0,0.25)') + ';padding:3px 4px;display:flex;flex-direction:column;justify-content:center;cursor:' + (has ? 'pointer' : 'default') + ';border-radius:2px;';
+      // flex:none — la case prend sa hauteur naturelle, le conteneur scroll si nécessaire
+      div.style.cssText = 'flex:none;border:1px solid ' + (has ? color+'66' : '#1a1a2a') + ';background:' + (has ? color+'14' : 'rgba(0,0,0,0.2)') + ';padding:4px 5px;display:flex;flex-direction:column;gap:2px;cursor:' + (has ? 'pointer' : 'default') + ';border-radius:2px;';
       var top = document.createElement('div');
       top.style.cssText = 'display:flex;justify-content:space-between;align-items:baseline;';
       var num2 = document.createElement('span');
-      num2.style.cssText = 'font-family:monospace;font-size:8px;color:' + (has ? color : '#2a2a3a') + ';font-weight:bold;';
+      num2.style.cssText = 'font-family:monospace;font-size:11px;color:' + (has ? color : '#333') + ';font-weight:bold;letter-spacing:.03em;';
       num2.textContent = '#' + slot.id;
       top.appendChild(num2);
       if(has && slot.price > 0) {
         var p = document.createElement('span');
-        p.style.cssText = 'font-family:monospace;font-size:8px;color:#e8c547;';
+        p.style.cssText = 'font-family:monospace;font-size:11px;color:#e8c547;font-weight:bold;';
         p.textContent = slot.price.toFixed(2) + '$';
         top.appendChild(p);
       }
       div.appendChild(top);
       if(has) {
         var desc = document.createElement('div');
-        desc.style.cssText = 'font-size:7px;color:#bbb;line-height:1.25;margin-top:1px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;';
+        desc.style.cssText = 'font-size:10px;color:#ccc;line-height:1.3;';
         desc.textContent = slot.desc;
         div.appendChild(desc);
         (function(slotId){ div.addEventListener('click', function(){
@@ -1402,7 +1842,7 @@ function renderMachineSlots() {
         }); })(slot.id);
       } else {
         var e = document.createElement('div');
-        e.style.cssText = 'font-size:7px;color:#2a2a3a;margin-top:1px;';
+        e.style.cssText = 'font-size:10px;color:#2a2a3a;font-style:italic;';
         e.textContent = '— vide';
         div.appendChild(e);
       }
@@ -1523,30 +1963,84 @@ function renderGrid() {
 // ═══════════════════════════════
 let selectedSlotId = null;
 
+const ALLERGEN_LIST = ['Gluten','Lactose','Oeufs','Noix','Arachides','Soja','Poisson','Crustacés','Céleri','Moutarde','Sésame','Sulfites'];
+
 function openSlot(id) {
   const slot = state.slots.find(s=>s.id===id);
   if(!slot || !slot.desc) return;
   selectedSlotId = id;
   const zone = state.zones[slot.zone];
   const color = zoneColor(zone);
-  const priceStr = (slot.price > 0) ? slot.price.toFixed(2) + ' $' : t('modalFree');
+  const priceStr = (slot.price > 0) ? slot.price.toFixed(2) + ' $' : 'Gratuit';
 
-  document.getElementById('modal-title').textContent = t('modalAvail');
-  document.getElementById('modal-slot-num').textContent = `#${slot.id}`;
+  // Photo
+  const img = document.getElementById('dish-photo-img');
+  const ph  = document.getElementById('dish-photo-placeholder');
+  if(slot.photo) {
+    img.src = slot.photo; img.style.display='block'; ph.style.display='none';
+  } else {
+    img.style.display='none'; ph.style.display='flex';
+  }
 
-  let body = `<div class="modal-desc">${slot.desc}</div>
-    <div class="modal-info-row">
-      <div class="modal-info-label">${t('modalPrice')}</div>
-      <div class="modal-info-val" style="font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:900;color:var(--accent);letter-spacing:.04em;">${priceStr}</div>
-    </div>`;
+  // Zone badge
+  const zb = document.getElementById('dish-zone-badge');
+  zb.textContent = zone.name + ' — ' + (zone.actual||zone.setpoint).toFixed(1) + '°C';
+  zb.style.borderColor = color; zb.style.color = color;
 
-  document.getElementById('modal-body').innerHTML = body;
+  // Prix badge
+  document.getElementById('dish-price-badge').textContent = priceStr;
 
-  let footer = `<button class="btn" onclick="closeModal()">${t('modalClose')}</button>`;
-  footer += '<button class="btn accent" onclick="startPurchase(' + slot.id + ')"' + ' style="font-size:15px;padding:8px 20px;">' + t('modalBuy') + ' — ' + priceStr + ' ›</button>';
+  // Titre + numéro
+  document.getElementById('dish-title').textContent = slot.desc;
+  document.getElementById('dish-case-num').textContent = '#' + slot.id;
 
-  document.getElementById('modal-footer').innerHTML = footer;
-  document.getElementById('slot-modal').classList.add('active');
+  // Macros
+  document.getElementById('dm-kcal').textContent = slot.calories  ? slot.calories + ' kcal' : '—';
+  document.getElementById('dm-prot').textContent = slot.proteines ? slot.proteines + ' g'   : '—';
+  document.getElementById('dm-gluc').textContent = slot.glucides  ? slot.glucides  + ' g'   : '—';
+  document.getElementById('dm-lipi').textContent = slot.lipides   ? slot.lipides   + ' g'   : '—';
+
+  // Méta chef / date
+  const meta = document.getElementById('dish-meta');
+  meta.innerHTML = '';
+  if(slot.chef) {
+    meta.innerHTML += `<div class="dish-meta-item"><div class="dish-meta-key">Chef</div><div class="dish-meta-val">${slot.chef}</div></div>`;
+  }
+  if(slot.prepDate) {
+    meta.innerHTML += `<div class="dish-meta-item"><div class="dish-meta-key">Préparé le</div><div class="dish-meta-val">${slot.prepDate}</div></div>`;
+  }
+
+  // Ingrédients
+  const ingrEl = document.getElementById('dish-ingredients');
+  const ingrBlock = document.getElementById('dish-ingr-block');
+  if(slot.ingredients) {
+    ingrEl.textContent = slot.ingredients;
+    ingrBlock.style.display = '';
+  } else {
+    ingrBlock.style.display = 'none';
+  }
+
+  // Allergènes
+  const allergEl = document.getElementById('dish-allergens');
+  const allergBlock = document.getElementById('dish-allerg-block');
+  const alls = slot.allergens || [];
+  if(alls.length) {
+    allergEl.innerHTML = alls.map(a=>`<div class="dish-allergen-pill">${a}</div>`).join('');
+    allergBlock.style.display = '';
+  } else {
+    allergBlock.style.display = 'none';
+  }
+
+  // Bouton acheter
+  const buyBtn = document.getElementById('dish-buy-btn');
+  buyBtn.textContent = 'Acheter — ' + priceStr + ' ›';
+  buyBtn.onclick = function(){ closeDishModal(); startPurchase(id); };
+
+  document.getElementById('dish-modal').classList.add('active');
+}
+
+function closeDishModal() {
+  document.getElementById('dish-modal').classList.remove('active');
 }
 
 function closeModal() {
@@ -1719,6 +2213,168 @@ function adminNav(panel) {
   if(panel==='temperatures') renderAdminTemps();
   if(panel==='config') renderAdminConfig();
   if(panel==='status') renderAdminStatus();
+  if(panel==='gantry') renderAdminGantry();
+}
+
+// ═══════════════════════════════
+//  ADMIN GANTRY
+// ═══════════════════════════════
+var _gantryMode = 'auto'; // 'auto' | 'manual'
+var _manualMoveInterval = null;
+var _manualSpeed = 5;
+var _gantryStatusInterval = null;
+
+function setGantryMode(mode) {
+  _gantryMode = mode;
+  var autoBtn   = document.getElementById('gantry-mode-auto');
+  var manualBtn = document.getElementById('gantry-mode-manual');
+  var lbl       = document.getElementById('gantry-mode-label');
+  var manPanel  = document.getElementById('gantry-manual-panel');
+  if(mode === 'manual') {
+    autoBtn.className   = 'btn';
+    manualBtn.className = 'btn accent';
+    lbl.textContent     = 'MANUEL';
+    lbl.style.color     = '#e89847';
+    if(manPanel) manPanel.style.display = '';
+    // Bloquer la machine d'état automatique
+    if(window.G) { window.G._manualOverride = true; window.G.targetX = window.G.x; window.G.targetZ = window.G.z; window.G.vx = 0; window.G.vz = 0; }
+  } else {
+    autoBtn.className   = 'btn accent';
+    manualBtn.className = 'btn';
+    lbl.textContent     = 'AUTOMATIQUE';
+    lbl.style.color     = 'var(--accent)';
+    if(manPanel) manPanel.style.display = 'none';
+    if(window.G) { window.G._manualOverride = false; }
+  }
+}
+
+function updateManualSpeed(v) {
+  _manualSpeed = parseInt(v);
+  var el = document.getElementById('gantry-speed-val');
+  if(el) el.textContent = v;
+}
+
+function startManualMove(dir) {
+  stopManualMove();
+  // Feedback visuel sur le bouton
+  var btnId = {up:'jbtn-up', down:'jbtn-down', left:'jbtn-left', right:'jbtn-right'}[dir];
+  var btn = btnId ? document.getElementById(btnId) : null;
+  if(btn) btn.classList.add('pressing');
+
+  _manualMoveInterval = setInterval(function() {
+    if(!window.G || _gantryMode !== 'manual') return;
+    // step proportionnel à la vitesse — valeurs calibrées pour être visibles
+    var stepX = _manualSpeed * 0.006;   // fraction de largeur par tick (40ms)
+    var stepZ = _manualSpeed * 3.5;     // pixels par tick
+    var zMax  = window.G.zMax || 250;
+    if(dir === 'left')  window.G.targetX = Math.max(0.01, window.G.targetX - stepX);
+    if(dir === 'right') window.G.targetX = Math.min(0.99,  window.G.targetX + stepX);
+    if(dir === 'up')    window.G.targetZ = Math.max(0,     window.G.targetZ - stepZ);
+    if(dir === 'down')  window.G.targetZ = Math.min(zMax,  window.G.targetZ + stepZ);
+    // Ne PAS écraser G.x/G.z directement — le spring dans updateGantry suit la target
+  }, 40);
+}
+
+function stopManualMove() {
+  if(_manualMoveInterval) { clearInterval(_manualMoveInterval); _manualMoveInterval = null; }
+  document.querySelectorAll('.joypad-btn').forEach(function(b){ b.classList.remove('pressing'); });
+}
+
+function manualGrab() {
+  if(!window.G) return;
+  window.G.carrying = true;
+  window.G._gap = 3;
+}
+
+function manualRelease() {
+  if(!window.G) return;
+  window.G.carrying = false;
+  window.G._gap = 9;
+}
+
+function manualHome() {
+  if(!window.G) return;
+  window.G.targetX = 0.02;
+  window.G.targetZ = 0;
+}
+
+function manualEmergencyStop() {
+  stopManualMove();
+  if(!window.G) return;
+  window.G.vx = 0; window.G.vz = 0;
+  window.G.targetX = window.G.x;
+  window.G.targetZ = window.G.z;
+}
+
+function manualGoto(x, z) {
+  if(!window.G) return;
+  if(x !== null) window.G.targetX = x;
+  if(z !== null) window.G.targetZ = z;
+  // En mode auto on peut quand même forcer une position rapide
+  if(!window.G._manualOverride) {
+    if(x !== null) window.G.x = x;
+    if(z !== null) window.G.z = z;
+    window.G.vx = 0; window.G.vz = 0;
+  }
+}
+
+function clearGantryQueue() {
+  window.gantryQueue = [];
+  renderAdminGantry();
+}
+
+function renderAdminGantry() {
+  setGantryMode(_gantryMode);
+
+  // Injecter le machine-interactive dans la colonne preview
+  const liveView = document.getElementById('gantry-live-view');
+  const machineEl = document.getElementById('machine-interactive');
+  if(liveView && machineEl && !liveView.contains(machineEl)) {
+    // Déplacer (pas cloner) le vrai element pour que le SVG animé reste actif
+    liveView.appendChild(machineEl);
+    machineEl.style.width  = '100%';
+    machineEl.style.height = '100%';
+    machineEl.style.position = 'absolute';
+    machineEl.style.inset = '0';
+  }
+
+  // Rafraîchir état toutes les 250ms
+  if(_gantryStatusInterval) clearInterval(_gantryStatusInterval);
+  _gantryStatusInterval = setInterval(function() {
+    var panel = document.getElementById('panel-gantry');
+    if(!panel || !panel.classList.contains('active')) {
+      clearInterval(_gantryStatusInterval);
+      // Remettre machine-interactive dans le home screen quand on quitte
+      _restoreMachineToHome();
+      return;
+    }
+    if(!window.G) return;
+    var ph  = document.getElementById('gm-phase');
+    var gx  = document.getElementById('gm-x');
+    var gz  = document.getElementById('gm-z');
+    var gc  = document.getElementById('gm-carry');
+    var ql  = document.getElementById('gantry-queue-list');
+    var badge = document.getElementById('gantry-preview-mode-badge');
+    if(ph) ph.textContent = window.G.phase + (window.G._manualOverride ? ' ✋' : '');
+    if(gx) gx.textContent = (window.G.x * 100).toFixed(1) + '%';
+    if(gz) gz.textContent = Math.round(window.G.z) + 'px';
+    if(gc) { gc.textContent = window.G.carrying ? '● OUI' : '○ NON'; gc.style.color = window.G.carrying ? '#5de88c' : '#888'; }
+    if(badge) { badge.textContent = _gantryMode === 'manual' ? '✋ MANUEL' : '⚙ AUTO'; badge.style.color = _gantryMode === 'manual' ? '#e89847' : 'var(--accent)'; }
+    var q = window.gantryQueue || [];
+    if(ql) ql.textContent = q.length ? q.map(function(j,i){ return (i+1)+'. Case #'+j.slotId+(j.desc?' — '+j.desc.substring(0,18):''); }).join('\n') : 'Vide';
+  }, 250);
+}
+
+function _restoreMachineToHome() {
+  var machineEl = document.getElementById('machine-interactive');
+  var homeContent = document.querySelector('#screen-home .content');
+  if(machineEl && homeContent && !homeContent.contains(machineEl)) {
+    homeContent.insertBefore(machineEl, homeContent.firstChild);
+    machineEl.style.width   = '100%';
+    machineEl.style.height  = '';
+    machineEl.style.position = '';
+    machineEl.style.inset   = '';
+  }
 }
 
 function renderAdmin() { renderAdminCases(); renderAdminTemps(); renderAdminConfig(); }
@@ -1777,36 +2433,209 @@ function renderAdminCases() {
   });
 }
 
+function buildAllergenGrid(selected) {
+  const grid = document.getElementById('allergen-grid');
+  if(!grid) return;
+  grid.innerHTML = '';
+  ALLERGEN_LIST.forEach(function(a) {
+    const checked = (selected||[]).indexOf(a) >= 0;
+    const div = document.createElement('div');
+    div.className = 'allergen-check' + (checked ? ' checked' : '');
+    div.dataset.allergen = a;
+    div.innerHTML = '<span>' + a + '</span>';
+    div.onclick = function() {
+      div.classList.toggle('checked');
+    };
+    grid.appendChild(div);
+  });
+}
+
+function getCheckedAllergens() {
+  return Array.from(document.querySelectorAll('#allergen-grid .allergen-check.checked'))
+    .map(function(d){ return d.dataset.allergen; });
+}
+
+// ═══════════════════════════════
+//  GITHUB TOKEN
+// ═══════════════════════════════
+const GITHUB_REPO    = 'simonvelucia-afk/LunchMachine-images';
+const GITHUB_BRANCH  = 'main';
+const GITHUB_IMG_PATH = '';  // racine du repo
+const GITHUB_IMG_BASE = 'https://raw.githubusercontent.com/simonvelucia-afk/LunchMachine-images/main/';
+function saveGitHubToken() {
+  const tok = document.getElementById('github-token-input').value.trim();
+  if(!tok) return;
+  try { localStorage.setItem('ml_gh_token', tok); } catch(e){}
+  const st = document.getElementById('github-token-status');
+  if(st) { st.textContent = '✓ Token sauvegardé'; st.style.color = 'var(--success)'; }
+}
+
+function getGitHubToken() {
+  try { return localStorage.getItem('ml_gh_token') || ''; } catch(e){ return ''; }
+}
+
+// Populate token field when config panel opens
+const _origRenderAdminConfig = typeof renderAdminConfig === 'function' ? renderAdminConfig : null;
+
+// ═══════════════════════════════
+//  PHOTO UPLOAD
+// ═══════════════════════════════
+function handlePhotoFile(evt) {
+  const file = evt.target.files && evt.target.files[0];
+  if(!file) return;
+  const status = document.getElementById('photo-upload-status');
+  if(status) { status.textContent = '⏳ Lecture du fichier…'; status.className = 'upload-status loading'; }
+
+  // Resize côté client avant upload — max 900px large
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const img = new Image();
+    img.onload = function() {
+      const MAX = 900;
+      let w = img.width, h = img.height;
+      if(w > MAX) { h = Math.round(h * MAX / w); w = MAX; }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      const b64 = canvas.toDataURL('image/jpeg', 0.82).split(',')[1];
+      // Nom de fichier : slug du nom de plat + timestamp
+      const desc = (document.getElementById('admin-slot-desc').value || 'plat').trim();
+      const slug = desc.toLowerCase().replace(/[^a-z0-9]+/g, '-').substring(0, 30);
+      const fname = slug + '-' + Date.now() + '.jpg';
+      uploadToGitHub(fname, b64, status);
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+  // Reset input pour permettre re-sélection du même fichier
+  evt.target.value = '';
+}
+
+async function uploadToGitHub(filename, b64content, statusEl) {
+  const token = getGitHubToken();
+  if(!token) {
+    if(statusEl) { statusEl.textContent = '⚠ Token GitHub manquant — aller dans Config'; statusEl.className = 'upload-status err'; }
+    return;
+  }
+  if(statusEl) { statusEl.textContent = '⏳ Upload vers GitHub…'; statusEl.className = 'upload-status loading'; }
+  const path = GITHUB_IMG_PATH + filename;
+  const url  = 'https://api.github.com/repos/' + GITHUB_REPO + '/contents/' + path;
+  try {
+    const res = await fetch(url, {
+      method: 'PUT',
+      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: 'Upload photo: ' + filename, content: b64content, branch: GITHUB_BRANCH })
+    });
+    if(res.ok) {
+      const fullUrl = GITHUB_IMG_BASE + filename;
+      // Remplir le champ photo
+      const inp = document.getElementById('admin-slot-photo');
+      if(inp) inp.value = filename;
+      // Afficher preview
+      const prev = document.getElementById('admin-photo-preview');
+      if(prev) { prev.src = fullUrl; prev.style.display = 'block'; }
+      if(statusEl) { statusEl.textContent = '✓ ' + filename + ' uploadé'; statusEl.className = 'upload-status ok'; }
+    } else {
+      const err = await res.json();
+      if(statusEl) { statusEl.textContent = '✗ ' + (err.message || res.status); statusEl.className = 'upload-status err'; }
+    }
+  } catch(e) {
+    if(statusEl) { statusEl.textContent = '✗ Erreur réseau: ' + e.message; statusEl.className = 'upload-status err'; }
+  }
+}
+
+function buildPhotoUrl(val) {
+  if(!val) return '';
+  // Si déjà une URL complète, la garder telle quelle
+  if(val.startsWith('http')) return val;
+  // Sinon préfixer avec le base GitHub
+  return GITHUB_IMG_BASE + val.replace(/^\/+/, '');
+}
+
+function previewPhoto() {
+  const val = document.getElementById('admin-slot-photo').value.trim();
+  const url = buildPhotoUrl(val);
+  const img = document.getElementById('admin-photo-preview');
+  if(url) {
+    img.src = url; img.style.display = 'block';
+    img.onerror = function(){ img.style.display='none'; img.title='Image introuvable: ' + url; };
+  } else {
+    img.style.display = 'none';
+  }
+}
+
 function selectAdminSlot(id) {
   adminSelectedSlot = id;
   const slot = state.slots.find(s=>s.id===id);
   document.getElementById('admin-slot-edit').classList.add('active');
   document.getElementById('edit-slot-label').textContent = `Case #${id} — Zone ${slot.zone} (${state.zones[slot.zone]?.name})`;
-  document.getElementById('admin-slot-desc').value = slot.desc || '';
-  document.getElementById('admin-desc-display').textContent = slot.desc || '—';
-  document.getElementById('admin-slot-price').value = slot.price ?? 0;
-  document.getElementById('admin-slot-desc').oninput = () => {
-    document.getElementById('admin-desc-display').textContent = document.getElementById('admin-slot-desc').value || '—';
-  };
+
+  // Champs existants
+  document.getElementById('admin-slot-desc').value    = slot.desc    || '';
+  document.getElementById('admin-slot-price').value   = slot.price   ?? 0;
+
+  // Nouveaux champs
+  // Champ photo — afficher juste le nom de fichier si URL GitHub standard
+  const rawPhoto = slot.photo || '';
+  const photoDisplay = rawPhoto.startsWith(GITHUB_IMG_BASE)
+    ? rawPhoto.replace(GITHUB_IMG_BASE, '')
+    : rawPhoto;
+  document.getElementById('admin-slot-photo').value = photoDisplay;
+  document.getElementById('admin-slot-chef').value        = slot.chef        || '';
+  document.getElementById('admin-slot-date').value        = slot.prepDate    || '';
+  document.getElementById('admin-slot-ingredients').value = slot.ingredients || '';
+  document.getElementById('admin-slot-calories').value    = slot.calories    || '';
+  document.getElementById('admin-slot-proteines').value   = slot.proteines   || '';
+  document.getElementById('admin-slot-glucides').value    = slot.glucides    || '';
+  document.getElementById('admin-slot-lipides').value     = slot.lipides     || '';
+
+  // Aperçu photo
+  const prevImg = document.getElementById('admin-photo-preview');
+  if(slot.photo) { prevImg.src = slot.photo; prevImg.style.display = 'block'; }
+  else { prevImg.style.display = 'none'; }
+
+  // Allergènes
+  buildAllergenGrid(slot.allergens || []);
+
   renderAdminCases();
 }
 
 function saveSlotDesc() {
   if(adminSelectedSlot===null) return;
   const slot = state.slots.find(s=>s.id===adminSelectedSlot);
-  slot.desc = document.getElementById('admin-slot-desc').value.trim();
+  slot.desc         = document.getElementById('admin-slot-desc').value.trim();
   const p = parseFloat(document.getElementById('admin-slot-price').value);
-  slot.price = isNaN(p) ? 0 : Math.round(p * 100) / 100;
-  saveState(); renderAdminCases(); flashSave();
+  slot.price        = isNaN(p) ? 0 : Math.round(p * 100) / 100;
+  slot.photo        = buildPhotoUrl(document.getElementById('admin-slot-photo').value.trim());
+  slot.chef         = document.getElementById('admin-slot-chef').value.trim();
+  slot.prepDate     = document.getElementById('admin-slot-date').value.trim();
+  slot.ingredients  = document.getElementById('admin-slot-ingredients').value.trim();
+  slot.calories     = parseFloat(document.getElementById('admin-slot-calories').value)  || 0;
+  slot.proteines    = parseFloat(document.getElementById('admin-slot-proteines').value) || 0;
+  slot.glucides     = parseFloat(document.getElementById('admin-slot-glucides').value)  || 0;
+  slot.lipides      = parseFloat(document.getElementById('admin-slot-lipides').value)   || 0;
+  slot.allergens    = getCheckedAllergens();
+  saveState(); renderAdminCases(); renderMachineSlots(); renderHomeStats(); flashSave();
 }
+
 function clearSlotDesc() {
   if(adminSelectedSlot===null) return;
   const slot = state.slots.find(s=>s.id===adminSelectedSlot);
   slot.desc=''; slot.price=0; slot.reserved=false; slot.reservedBy='';
-  document.getElementById('admin-slot-desc').value='';
-  document.getElementById('admin-desc-display').textContent='—';
-  document.getElementById('admin-slot-price').value='0';
-  saveState(); renderAdminCases(); flashSave();
+  slot.photo=''; slot.chef=''; slot.prepDate=''; slot.ingredients='';
+  slot.calories=0; slot.proteines=0; slot.glucides=0; slot.lipides=0; slot.allergens=[];
+  // Reset form
+  ['admin-slot-desc','admin-slot-photo','admin-slot-chef','admin-slot-date','admin-slot-ingredients'].forEach(function(id){
+    var el = document.getElementById(id); if(el) el.value='';
+  });
+  ['admin-slot-price','admin-slot-calories','admin-slot-proteines','admin-slot-glucides','admin-slot-lipides'].forEach(function(id){
+    var el = document.getElementById(id); if(el) el.value='0';
+  });
+  var prev = document.getElementById('admin-photo-preview');
+  if(prev) { prev.style.display='none'; prev.src=''; }
+  buildAllergenGrid([]);
+  saveState(); renderAdminCases(); renderMachineSlots(); renderHomeStats(); flashSave();
 }
 function returnBox() {
   if(state.boxCount >= state.boxMax) return;
@@ -1851,6 +2680,8 @@ function clearAllCancel() {
 function clearAllSlots() {
   state.slots.forEach(s => {
     s.desc = ''; s.price = 0; s.reserved = false; s.reservedBy = '';
+    s.photo=''; s.chef=''; s.prepDate=''; s.ingredients='';
+    s.calories=0; s.proteines=0; s.glucides=0; s.lipides=0; s.allergens=[];
   });
   document.getElementById('admin-slot-edit').classList.remove('active');
   adminSelectedSlot = null;
@@ -1952,6 +2783,9 @@ function renderAdminConfig() {
     const bc = document.getElementById('box-count-input');
     if(bm) bm.value = state.boxMax;
     if(bc) bc.value = state.boxCount;
+    // Token GitHub
+    const ti = document.getElementById('github-token-input');
+    if(ti) { const t = getGitHubToken(); ti.value = t ? t.substring(0,8)+'…' : ''; }
   }, 0);
   const el = document.getElementById('config-section-rows'); el.innerHTML='';
   ZONE_IDS.forEach(id => {
@@ -2118,17 +2952,80 @@ window.gantryWaitingPickup = false;
     if(empty)     empty.style.display     = 'flex';
   };
 
+  // ── Audio ────────────────────────────────────────────────────────────────
+  var _actx = null;
+  function getACtx(){ if(!_actx) _actx = new (window.AudioContext||window.webkitAudioContext)(); return _actx; }
+  function playTone(freq, type, dur, vol){
+    try {
+      var ctx = getACtx();
+      var o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = type||'sine'; o.frequency.value = freq;
+      g.gain.setValueAtTime(vol||0.08, ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+dur);
+      o.connect(g); g.connect(ctx.destination);
+      o.start(); o.stop(ctx.currentTime+dur);
+    } catch(e){}
+  }
+  function soundMotorStart(){ playTone(180,'sawtooth',0.18,0.06); }
+  function soundMotorStop(){  playTone(120,'sine',0.12,0.05); }
+  function soundPickupGrab(){ playTone(440,'square',0.08,0.09); setTimeout(function(){ playTone(660,'square',0.06,0.07); },80); }
+  function soundPickupDrop(){ playTone(330,'triangle',0.14,0.10); setTimeout(function(){ playTone(220,'triangle',0.12,0.08); },100); }
+  function soundReady(){
+    playTone(523,'sine',0.1,0.1);
+    setTimeout(function(){ playTone(659,'sine',0.1,0.1); },110);
+    setTimeout(function(){ playTone(784,'sine',0.18,0.12); },220);
+  }
+
+  // ── Trail system ─────────────────────────────────────────────────────────
+  var _trailLast = {x:-1,y:-1}, _trailInterval = 0;
+  function spawnTrail(px, py, color){
+    var ov = document.getElementById('gantry-overlay');
+    if(!ov) return;
+    var d = document.createElement('div');
+    d.className = 'g-trail';
+    d.style.cssText = 'left:'+(px-2)+'px;top:'+(py-2)+'px;background:'+color+';position:absolute;';
+    ov.appendChild(d);
+    setTimeout(function(){ if(d.parentNode) d.parentNode.removeChild(d); }, 380);
+  }
+  function spawnSparks(px, py){
+    var ov = document.getElementById('gantry-overlay');
+    if(!ov) return;
+    var colors = ['#e8c547','#5de88c','#4fa3e8','#fff'];
+    for(var i=0;i<6;i++){
+      (function(i){
+        setTimeout(function(){
+          var d = document.createElement('div');
+          d.className = 'g-spark';
+          var angle = (Math.PI*2/6)*i;
+          var r = 6+Math.random()*10;
+          d.style.cssText = 'left:'+(px+Math.cos(angle)*r-4)+'px;top:'+(py+Math.sin(angle)*r-4)+'px;background:'+colors[i%colors.length]+';position:absolute;';
+          ov.appendChild(d);
+          setTimeout(function(){ if(d.parentNode) d.parentNode.removeChild(d); }, 420);
+        }, i*30);
+      })(i);
+    }
+  }
+
   // ── State ───────────────────────────────────────────────────────────────
   var G = {
     x: 0.02, targetX: 0.02,
     z: 0,   targetZ: 0,
+    vx: 0, vz: 0,          // velocity for smooth deceleration
     carrying: false,
     phase: 'idle', timer: 60,
-    currentJob: null,   // { slotId, xFrac }
+    prevPhase: 'idle',
+    currentJob: null,
     W:0, H:0, zMax:0
   };
 
-  function lerp(a,b,t){ return a+(b-a)*t; }
+  // Lerp springy — plus fluide que lerp simple
+  window.G = G; // exposer pour le panneau admin gantry
+  function springStep(cur, target, vel, stiffness, damping){
+    var force = (target - cur) * stiffness;
+    vel = (vel + force) * damping;
+    return { v: vel, p: cur + vel };
+  }
+
   function setAttr(id, attrs){
     var el=document.getElementById(id);
     if(!el) return;
@@ -2146,6 +3043,10 @@ window.gantryWaitingPickup = false;
     if(info) info.textContent = 'Case #' + job.slotId + (job.desc ? ' — ' + job.desc : '') + (job.price > 0 ? ' | ' + job.price.toFixed(2) + ' $' : '');
     if(num)  num.textContent  = '#' + job.slotId;
     window.gantryWaitingPickup = true;
+    soundReady();
+    // Spawn sparks at pickup area
+    var ov = document.getElementById('gantry-overlay');
+    if(ov){ var r=ov.getBoundingClientRect(); spawnSparks(50, r.height*0.78); }
   }
 
   function updateGantry(){
@@ -2175,10 +3076,63 @@ window.gantryWaitingPickup = false;
     setAttr('grxb-bl',    {x:PAD-1, y:BOT_Y-2, width:6, height:RAIL_H+6});
     setAttr('grxb-br',    {x:W-PAD-5, y:BOT_Y-2, width:6, height:RAIL_H+6});
 
-    // ── Smooth motion ─────────────────────────────────────────────────
-    G.x=lerp(G.x, G.targetX, 0.055);
-    G.z=lerp(G.z, G.targetZ, 0.05);
-    var cx=PAD+G.x*(W-PAD*2);
+    // ── Spring-based smooth motion (plus fluide que lerp simple) ─────────
+    // En mode manuel override, skip la machine d'état
+    if(G._manualOverride) {
+      // Spring très réactif en manuel — suit la cible presque immédiatement
+      var sx2 = springStep(G.x, G.targetX, G.vx, 0.35, 0.70);
+      G.vx = sx2.v; G.x = sx2.p;
+      var sz2 = springStep(G.z, G.targetZ, G.vz, 0.32, 0.71);
+      G.vz = sz2.v; G.z = sz2.p;
+      var cx = PAD + G.x*(W-PAD*2);
+      var cy = TRAVEL_TOP + G.z + RUNNER_H;
+      // Mise à jour visuelle seulement
+      var yc2=document.getElementById('gr-y-carriage');
+      if(yc2) yc2.setAttribute('transform','translate('+cx+',0)');
+      setAttr('gry-body',{x:-3,y:TRAVEL_TOP,width:6,height:YLEN});
+      setAttr('gry-track',{x1:0,y1:TRAVEL_TOP+2,x2:0,y2:TRAVEL_BOT-2});
+      setAttr('gry-runner-t',{x:-9,y:TOP_Y-1,width:18,height:RUNNER_H+2});
+      setAttr('gry-runner-b',{x:-9,y:BOT_Y-2,width:18,height:RUNNER_H+2});
+      var gp2=document.getElementById('gr-gripper');
+      if(gp2) gp2.setAttribute('transform','translate(0,'+cy+')');
+      if(!G._gap) G._gap=9;
+      G._gap=lerp(G._gap, G.carrying?3:9, 0.12);
+      setAttr('gr-finger-l',{x:-(G._gap)-6}); setAttr('gr-finger-r',{x:G._gap});
+      var tray2=document.getElementById('gr-tray');
+      if(tray2) tray2.setAttribute('opacity',G.carrying?'1':'0');
+      var ledEl2=document.getElementById('gr-led');
+      if(ledEl2) ledEl2.setAttribute('fill','#e89847');
+      requestAnimationFrame(updateGantry);
+      return;
+    }
+
+    // ── Spring normal ─────────────────────────────────────────────────
+    var sx = springStep(G.x, G.targetX, G.vx, 0.08, 0.82);
+    G.vx = sx.v; G.x = sx.p;
+    var sz = springStep(G.z, G.targetZ, G.vz, 0.07, 0.83);
+    G.vz = sz.v; G.z = sz.p;
+    var cx = PAD + G.x*(W-PAD*2);
+    var cy = TRAVEL_TOP + G.z + RUNNER_H;
+
+    // ── Trail: spawn dot si déplacement significatif ──────────────────
+    var speed = Math.abs(sx.v)*(W-PAD*2) + Math.abs(sz.v);
+    if(speed > 1.2) {
+      _trailInterval++;
+      if(_trailInterval % 3 === 0) {
+        var trailColor = G.carrying ? '#e8c547' : '#4fa3e8';
+        spawnTrail(cx, cy, trailColor);
+      }
+    }
+
+    // ── LED couleur selon état ────────────────────────────────────────
+    var ledEl = document.getElementById('gr-led');
+    if(ledEl) {
+      var ledColor = G.phase==='idle' ? '#e8c547' :
+                     G.carrying       ? '#5de88c' :
+                     G.phase==='waitPickup' ? '#e85047' : '#4fa3e8';
+      ledEl.setAttribute('fill', ledColor);
+      ledEl.setAttribute('filter', G.carrying ? 'url(#gr-glow)' : '');
+    }
 
     // ── Y rail carriage (translate X) ─────────────────────────────────
     var yc=document.getElementById('gr-y-carriage');
@@ -2191,20 +3145,22 @@ window.gantryWaitingPickup = false;
 
     // ── Gripper Z ─────────────────────────────────────────────────────
     var gp=document.getElementById('gr-gripper');
-    if(gp) gp.setAttribute('transform','translate(0,'+(TRAVEL_TOP+G.z+RUNNER_H)+')');
+    if(gp) gp.setAttribute('transform','translate(0,'+cy+')');
 
-    // Fingers open/close
+    // Fingers open/close avec transition progressive
     var openGap=9, closeGap=3;
-    var gap=G.carrying?closeGap:openGap;
-    setAttr('gr-finger-l',{x:-gap-6});
-    setAttr('gr-finger-r',{x:gap});
+    var targetGap = G.carrying ? closeGap : openGap;
+    if(!G._gap) G._gap = openGap;
+    G._gap = lerp(G._gap, targetGap, 0.12);
+    setAttr('gr-finger-l',{x:-(G._gap)-6});
+    setAttr('gr-finger-r',{x:G._gap});
 
     // Tray visibility
     var tray=document.getElementById('gr-tray');
     if(tray) tray.setAttribute('opacity',G.carrying?'1':'0');
 
-    // Output indicator
-    var outY=H-26;
+    // Output indicator — repositionné en bas à gauche de la col cueillette
+    var outY = H * 0.72;
     setAttr('gr-out-box', {x:PAD+2, y:outY, width:56, height:20});
     var ol=document.getElementById('gr-out-lbl');
     if(ol){ ol.setAttribute('x',String(PAD+30)); ol.setAttribute('y',String(outY+10)); }
@@ -2213,71 +3169,82 @@ window.gantryWaitingPickup = false;
     G.timer--;
     var zUp=2, zDown=G.zMax;
 
-    // Heights — calibrated to column layout geometry
-    var zPickup = zDown * 0.779; // pickup zone vertical center (~320px)
-    var zSlot   = zDown * 0.501; // slot area average (~211px)
+    // zSlot : milieu vertical de la zone slots (col 3/4)
+    // La colonne fait ~412px de haut, header=14px, les slots occupent le reste
+    // Le milieu des slots est à ~55% du travel total
+    var zSlot = zDown * 0.55;
 
-    // Helper: are we close enough to target?
-    function near(a,b,d){ return Math.abs(a-b)<(d||0.018); }
+    // zPickup : zone cueillette (col 2, bas) — à ~78% du travel
+    // La cueillette est dans la moitié inférieure de la col cueillette
+    var zPickup = zDown * 0.78;
+
+    function near(a,b,d){ return Math.abs(a-b)<(d||0.025); }
+
+    // Détection changement de phase pour sons
+    if(G.phase !== G.prevPhase) {
+      if(G.phase==='toSlot' || G.phase==='toPickup' || G.phase==='returnMove') soundMotorStart();
+      if(G.phase==='toPark' || G.phase==='idle') soundMotorStop();
+      if(G.phase==='toPickup' && G.prevPhase==='toSlot') soundPickupGrab();
+      if(G.phase==='waitPickup') soundPickupDrop();
+      G.prevPhase = G.phase;
+    }
 
     if(G.phase==='idle') {
-      G.targetX=0.02; G.targetZ=zUp; // park top-left
+      G.targetX=0.02; G.targetZ=zUp;
       if(!window.gantryWaitingPickup && G.timer<=0 && window.gantryQueue.length>0) {
         G.currentJob = window.gantryQueue.shift();
-        G.phase='toSlot'; G.timer=10;
+        G.phase='toSlot'; G.timer=40;
       } else if(G.timer<=0) { G.timer=10; }
 
     } else if(G.phase==='toSlot') {
-      // Move diagonally straight to slot position at slot height
       G.targetX = G.currentJob.xFrac;
       G.targetZ = zSlot;
-      // Wait until both X and Z are close
-      if(G.timer<=0 && near(G.x, G.currentJob.xFrac) && near(G.z, zSlot, 8)) {
+      // Attendre que le robot soit vraiment arrivé (pas de timer minimum)
+      if(near(G.x, G.currentJob.xFrac, 0.02) && near(G.z, zSlot, 6)) {
         G.carrying = true;
-        G.phase='toPickup'; G.timer=25;
-      } else if(G.timer<=0) { G.timer=10; }
+        spawnSparks(cx, cy);
+        G.phase='toPickup'; G.timer=15;
+      }
 
     } else if(G.phase==='toPickup') {
-      // Move diagonally straight to pickup zone at delivery height
       G.targetX = COL_X.pickup;
       G.targetZ = zPickup;
-      if(G.timer<=0 && near(G.x, COL_X.pickup) && near(G.z, zPickup, 8)) {
+      if(near(G.x, COL_X.pickup, 0.02) && near(G.z, zPickup, 6)) {
         G.carrying = false;
         showPickupZone(G.currentJob);
         G.phase='waitPickup'; G.timer=9999;
-      } else if(G.timer<=0) { G.timer=10; }
+      }
 
     } else if(G.phase==='waitPickup') {
-      // Boîte déposée — retour immédiat au stationnement
       G.targetX = 0.02;
       G.targetZ = zUp;
       if(!window.gantryWaitingPickup) { G.phase='toPark'; G.timer=10; }
 
     } else if(G.phase==='toPark') {
-      // Move diagonally to park position
       G.targetX = 0.02;
       G.targetZ = zUp;
-      if(G.timer<=0 && near(G.x, 0.02) && near(G.z, zUp, 5)) {
+      if(near(G.x, 0.02, 0.02) && near(G.z, zUp, 5)) {
         G.phase='idle'; G.timer=30;
-      } else if(G.timer<=0) { G.timer=10; }
+      }
 
     } else if(G.phase==='returnToSlot') {
-      // Grab at pickup zone (already there) then move diagonally to slot
       G.targetX = COL_X.pickup;
       G.targetZ = zPickup;
-      if(G.timer<=0 && near(G.z, zPickup, 5)) {
+      if(near(G.x, COL_X.pickup, 0.02) && near(G.z, zPickup, 6)) {
         G.carrying = true;
+        soundPickupGrab();
+        spawnSparks(cx, cy);
         G.phase='returnMove'; G.timer=10;
-      } else if(G.timer<=0) { G.timer=10; }
+      }
 
     } else if(G.phase==='returnMove') {
-      // Move diagonally straight to original slot
       if(G.currentJob) G.targetX = G.currentJob.xFrac;
       G.targetZ = zSlot;
-      if(G.timer<=0 && G.currentJob && near(G.x, G.currentJob.xFrac) && near(G.z, zSlot, 8)) {
+      if(G.currentJob && near(G.x, G.currentJob.xFrac, 0.02) && near(G.z, zSlot, 6)) {
         G.carrying = false;
+        soundPickupDrop();
         G.phase='returnDrop'; G.timer=20;
-      } else if(G.timer<=0) { G.timer=10; }
+      }
 
     } else if(G.phase==='returnDrop') {
       if(G.timer<=0) {
@@ -2287,7 +3254,6 @@ window.gantryWaitingPickup = false;
       }
 
     } else if(G.phase==='ascend2') {
-      // Legacy alias for toPark
       G.targetX=0.02; G.targetZ=zUp;
       if(G.timer<=0){ G.phase='idle'; G.timer=30; }
     }
