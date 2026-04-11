@@ -3875,9 +3875,26 @@ updateAdminBtn();
 (async function() {
   const urlToken = new URLSearchParams(location.search).get('chtoken');
   if(!urlToken || !NET_MODE) return;
+
+  // Nettoyer le token de l'URL immédiatement
+  const cleanUrl = location.pathname + '?machine=' + MACHINE_ID;
+  history.replaceState(null, '', cleanUrl);
+
   try {
-    // Récupérer le profil avec ce token
-    const profiles = await chFetch('profiles?select=id,full_name,unit,role,is_active,resident_plan,resident_plan_until', {}, urlToken);
+    // Valider le token via l'endpoint auth Supabase pour obtenir l'user_id
+    const authRes = await fetch(CH_URL + '/auth/v1/user', {
+      headers: { 'apikey': CH_ANON, 'Authorization': 'Bearer ' + urlToken }
+    });
+    if(!authRes.ok) return;
+    const authData = await authRes.json();
+    const userId = authData.id;
+    if(!userId) return;
+
+    // Charger le profil avec l'user_id connu
+    const profiles = await chFetch(
+      'profiles?id=eq.' + userId + '&select=id,full_name,unit,role,is_active,resident_plan,resident_plan_until',
+      {}, urlToken
+    );
     const profile = Array.isArray(profiles) && profiles[0];
     if(!profile) return;
     if(profile.is_active === false) return;
@@ -3885,21 +3902,17 @@ updateAdminBtn();
     if(!plan || plan === 'none') return;
     if(profile.resident_plan_until && new Date(profile.resident_plan_until) < new Date()) return;
 
-    // Charger les dépendants
+    // Charger les dépendants avec allow_lunch
     const deps = await chFetch(
-      'dependents?parent_id=eq.' + profile.id + '&allow_lunch=eq.true&select=id,name,age&order=name',
+      'dependents?parent_id=eq.' + userId + '&allow_lunch=eq.true&select=id,name,age&order=name',
       {}, urlToken
     );
     lunchSession = { profile, dependents: Array.isArray(deps) ? deps : [], token: urlToken };
     resetLunchSessionTimer();
     updateAdminBtn();
-    queueJoin();
     queueRender();
-
-    // Nettoyer le token de l'URL sans recharger la page
-    const cleanUrl = location.pathname + '?machine=' + MACHINE_ID;
-    history.replaceState(null, '', cleanUrl);
-  } catch(e) { /* token invalide ou expiré — ignorer */ }
+    queueJoin();
+  } catch(e) { console.warn('chtoken auto-login:', e); }
 })();
 
 // Mode réseau : charger depuis Supabase
