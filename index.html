@@ -971,12 +971,6 @@
             <span id="edit-slot-label" style="font-family:'Space Mono',monospace;font-size:12px;color:var(--accent)"></span>
           </div>
 
-          <!-- Repas préfabriqués -->
-          <div style="margin-bottom:8px;">
-            <div class="admin-field-label" style="margin-bottom:4px;">⚡ Insertion rapide — repas fréquents</div>
-            <div id="preset-meals-grid" style="display:flex;flex-wrap:wrap;gap:4px;"></div>
-          </div>
-
           <!-- Ligne 1 : description + prix -->
           <div style="display:flex;gap:8px;margin-bottom:6px;">
             <div style="flex:1;">
@@ -2316,9 +2310,9 @@ function confirmReservation() {
   renderHomeStats();
   renderMachineSlots();
 
-  // Dispatch to gantry queue
+  // Dispatch to gantry queue (xFrac sera recalculé dynamiquement dans idle)
   window.gantryQueue = window.gantryQueue || [];
-  window.gantryQueue.push({ slotId: slotId, xFrac: xFrac, desc: slotDesc, price: price });
+  window.gantryQueue.push({ slotId: slotId, xFrac: xFrac, zone: zoneId, desc: slotDesc, price: price });
 
   showSuccess(t('successMsg', buyer), '#' + slotId + ' — ' + zoneName + ' — ' + priceStr);
 }
@@ -2567,18 +2561,10 @@ function _restoreMachineToHome() {
     machineEl.style.height  = '';
     machineEl.style.position = '';
     machineEl.style.inset   = '';
-    // Force gantry re-init: dimensions may have been 0 while hidden
+    // Recalculer les positions colonnes après que le layout soit stable
     setTimeout(function() {
-      if(window.G) {
-        var svg = document.getElementById('gantry-svg');
-        if(svg) {
-          var W = svg.clientWidth || 500;
-          var H = svg.clientHeight || 360;
-          window.G.W = W; window.G.H = H;
-          window.G.zMax = (H - 28) - 14;
-        }
-      }
-    }, 80);
+      if(window._gantryRecalcCols) window._gantryRecalcCols();
+    }, 150);
   }
 }
 
@@ -2658,55 +2644,6 @@ function buildAllergenGrid(selected) {
 function getCheckedAllergens() {
   return Array.from(document.querySelectorAll('#allergen-grid .allergen-check.checked'))
     .map(function(d){ return d.dataset.allergen; });
-}
-
-// ═══════════════════════════════
-//  REPAS PRÉFABRIQUÉS
-// ═══════════════════════════════
-const PRESET_MEALS = [
-  { emoji:'🍗', label:'Poulet rôti',     desc:'Poulet rôti, légumes grillés, riz basmati',        price:9.50,  allergens:[], cal:520, prot:38, gluc:42, lip:14 },
-  { emoji:'🥩', label:'Bœuf & légumes', desc:'Bœuf braisé, carottes, pommes de terre, jus',       price:11.00, allergens:[], cal:610, prot:41, gluc:35, lip:22 },
-  { emoji:'🐟', label:'Saumon grillé',  desc:'Saumon grillé, quinoa, épinards, citron',           price:12.50, allergens:['Poisson'], cal:490, prot:36, gluc:28, lip:20 },
-  { emoji:'🥗', label:'Bowl végé',      desc:'Bowl légumes rôtis, pois chiches, houmous, taboulé', price:8.50,  allergens:['Sésame'], cal:420, prot:18, gluc:52, lip:12 },
-  { emoji:'🍝', label:'Pasta poulet',   desc:'Pâtes penne, poulet, sauce tomate basilic, parmesan', price:9.00, allergens:['Gluten','Lait'], cal:580, prot:32, gluc:65, lip:16 },
-  { emoji:'🥘', label:'Chili con carne','desc':'Chili con carne, haricots rouges, riz, crème sure', price:8.75, allergens:['Lait'], cal:550, prot:28, gluc:48, lip:18 },
-  { emoji:'🍛', label:'Curry légumes',  desc:'Curry de légumes, lait de coco, riz basmati, naan',  price:8.00,  allergens:['Gluten','Lait'], cal:470, prot:12, gluc:62, lip:16 },
-  { emoji:'🫕', label:'Soupe repas',    desc:'Soupe minestrone épaisse, légumes, vermicelles, pain', price:7.00, allergens:['Gluten'], cal:320, prot:14, gluc:44, lip:8 },
-  { emoji:'🥙', label:'Wrap dinde',     desc:'Wrap blé entier, dinde grillée, avocat, salsa',      price:9.25,  allergens:['Gluten'], cal:490, prot:30, gluc:40, lip:18 },
-  { emoji:'🍱', label:'Bento mixte',    desc:'Riz, edamame, poulet teriyaki, crudités, sauce soya', price:10.50, allergens:['Soya','Gluten'], cal:530, prot:33, gluc:55, lip:14 },
-];
-
-function renderPresetMeals() {
-  var grid = document.getElementById('preset-meals-grid');
-  if(!grid) return;
-  grid.innerHTML = '';
-  PRESET_MEALS.forEach(function(meal) {
-    var btn = document.createElement('button');
-    btn.style.cssText = 'background:var(--surface);border:1px solid var(--border);color:var(--text-dim);font-family:"Barlow Condensed",sans-serif;font-size:11px;font-weight:600;letter-spacing:.04em;padding:3px 8px;cursor:pointer;display:flex;align-items:center;gap:4px;white-space:nowrap;transition:border-color .15s,color .15s;';
-    btn.innerHTML = '<span style="font-size:13px;">' + meal.emoji + '</span><span>' + meal.label + '</span>';
-    btn.onmouseenter = function(){ btn.style.borderColor='var(--accent)'; btn.style.color='var(--accent)'; };
-    btn.onmouseleave = function(){ btn.style.borderColor='var(--border)'; btn.style.color='var(--text-dim)'; };
-    btn.onclick = function() { applyPresetMeal(meal); };
-    grid.appendChild(btn);
-  });
-}
-
-function applyPresetMeal(meal) {
-  var desc = document.getElementById('admin-slot-desc');
-  var price = document.getElementById('admin-slot-price');
-  var cal = document.getElementById('admin-slot-calories');
-  var prot = document.getElementById('admin-slot-proteines');
-  var gluc = document.getElementById('admin-slot-glucides');
-  var lip = document.getElementById('admin-slot-lipides');
-  if(desc)  desc.value  = meal.desc;
-  if(price) price.value = meal.price.toFixed(2);
-  if(cal)   cal.value   = meal.cal;
-  if(prot)  prot.value  = meal.prot;
-  if(gluc)  gluc.value  = meal.gluc;
-  if(lip)   lip.value   = meal.lip;
-  buildAllergenGrid(meal.allergens);
-  // Flash the description field to confirm
-  if(desc) { desc.style.borderColor='var(--accent)'; setTimeout(function(){ desc.style.borderColor=''; },600); }
 }
 
 // ═══════════════════════════════
@@ -2824,7 +2761,6 @@ function selectAdminSlot(id) {
   const slot = state.slots.find(s=>s.id===id);
   document.getElementById('admin-slot-edit').classList.add('active');
   document.getElementById('edit-slot-label').textContent = `Case #${id} — Zone ${slot.zone} (${state.zones[slot.zone]?.name})`;
-  renderPresetMeals();
 
   // Champs existants
   document.getElementById('admin-slot-desc').value    = slot.desc    || '';
@@ -3144,28 +3080,40 @@ window.gantryWaitingPickup = false;
 
 // ═══════════════════════════════
 //  GANTRY XY ANIMATION
-//  2 X rails (top+bottom) fixed
-//  1 Y rail sliding horizontally on both X rails
-//  Gripper slides vertically on Y rail
 // ═══════════════════════════════
 (function() {
 
-  // ── Public delivery queue ───────────────────────────────────────────────
-  // Each entry: { slotId, desc, price, xFrac }
   if(!window.gantryQueue) window.gantryQueue = [];
   window.gantryWaitingPickup = window.gantryWaitingPickup || false;
 
-  // xFrac for each zone column (fraction of machine width excluding retour+arm)
-  // Zone1 occupies roughly 35-55% of machine, zone2 55-75%
-  // Pickup zone is bottom-left ~8%
-  var COL_X = { pickup: 0.268, Z1: 0.551, Z2: 0.849 };
+  // Mesure les vraies positions X des colonnes en pixels relatifs au SVG
+  function getColXFracs() {
+    var svg = document.getElementById('gantry-svg');
+    if(!svg) return { pickup: 0.20, Z1: 0.55, Z2: 0.82 };
+    var svgRect = svg.getBoundingClientRect();
+    if(!svgRect.width) return { pickup: 0.20, Z1: 0.55, Z2: 0.82 };
+    function fracOf(el) {
+      if(!el) return null;
+      var r = el.getBoundingClientRect();
+      return (r.left + r.width / 2 - svgRect.left) / svgRect.width;
+    }
+    var f1 = fracOf(document.getElementById('pickup-col-empty'));
+    var f2 = fracOf(document.getElementById('zone1-slots'));
+    var f3 = fracOf(document.getElementById('zone2-slots'));
+    return {
+      pickup: f1 !== null ? Math.max(0.04, Math.min(0.95, f1)) : 0.20,
+      Z1:     f2 !== null ? Math.max(0.04, Math.min(0.95, f2)) : 0.55,
+      Z2:     f3 !== null ? Math.max(0.04, Math.min(0.95, f3)) : 0.82,
+    };
+  }
+
+  var COL_X = { pickup: 0.20, Z1: 0.55, Z2: 0.82 };
+  window._gantryRecalcCols = function() { COL_X = getColXFracs(); };
 
   window.gantryDispatch = function(slotId, zoneName) {
-    // Map zone name to column fraction
     var xf = COL_X.Z1;
     if(zoneName && zoneName.toLowerCase().indexOf('2') >= 0) xf = COL_X.Z2;
     window.gantryQueue.push({ slotId: slotId, xFrac: xf });
-    // Show the dispatch if not already moving
   };
 
   window.confirmPickup = function() {
@@ -3174,24 +3122,22 @@ window.gantryWaitingPickup = false;
     if(active) active.style.display = 'none';
     if(empty)  empty.style.display  = 'flex';
     window.gantryWaitingPickup = false;
-    G.currentJob = null;
-    G.targetX = 0.02;
-    G.phase = 'ascend2'; G.timer = 50;
+    // Le currentJob est conservé jusqu'à ce que le robot soit parké
+    // La phase waitPickup détecte gantryWaitingPickup=false et passe à toPark
   };
 
   window.cancelPickup = function() {
     var job = G.currentJob;
     if(!job) return;
-    // Switch UI to "retour en cours" — do NOT restore slot yet
     var active    = document.getElementById('pickup-col-active');
     var returning = document.getElementById('pickup-col-returning');
     if(active)    active.style.display    = 'none';
     if(returning) returning.style.display = 'flex';
-    // Release the pickup lock — gantry will handle return
+    // Libérer le verrou pickup — le robot va reprendre le plateau
     window.gantryWaitingPickup = false;
-    // Tell gantry to return tray to original slot
-    // State restore happens in returnDrop phase callback
-    G.phase = 'returnToSlot'; G.timer = 90;
+    // Forcer passage en returnToSlot (le robot est encore à la cueillette)
+    G.phase = 'returnToSlot';
+    G.timer = 10;
   };
 
   // Called by gantry when tray is back in slot
@@ -3293,6 +3239,8 @@ window.gantryWaitingPickup = false;
     return { v: vel, p: cur + vel };
   }
 
+  function lerp(a, b, t){ return a + (b - a) * t; }
+
   function setAttr(id, attrs){
     var el=document.getElementById(id);
     if(!el) return;
@@ -3319,7 +3267,11 @@ window.gantryWaitingPickup = false;
   function updateGantry(){
     var svg=document.getElementById('gantry-svg');
     if(!svg){ requestAnimationFrame(updateGantry); return; }
-    var W=svg.clientWidth||500, H=svg.clientHeight||360;
+    var W=svg.clientWidth, H=svg.clientHeight;
+    if(!W || !H) {
+      var _r = svg.getBoundingClientRect();
+      W = _r.width || 500; H = _r.height || 360;
+    }
     G.W=W; G.H=H;
 
     // ── Geometry ────────────────────────────────────────────────────
@@ -3373,10 +3325,10 @@ window.gantryWaitingPickup = false;
       return;
     }
 
-    // ── Spring normal ─────────────────────────────────────────────────
-    var sx = springStep(G.x, G.targetX, G.vx, 0.08, 0.82);
+    // ── Spring normal — stiffness suffisante pour voir le mouvement ────
+    var sx = springStep(G.x, G.targetX, G.vx, 0.18, 0.78);
     G.vx = sx.v; G.x = sx.p;
-    var sz = springStep(G.z, G.targetZ, G.vz, 0.07, 0.83);
+    var sz = springStep(G.z, G.targetZ, G.vz, 0.16, 0.79);
     G.vz = sz.v; G.z = sz.p;
     var cx = PAD + G.x*(W-PAD*2);
     var cy = TRAVEL_TOP + G.z + RUNNER_H;
@@ -3434,101 +3386,152 @@ window.gantryWaitingPickup = false;
 
     // ── State machine ──────────────────────────────────────────────────
     G.timer--;
-    var zUp=2, zDown=G.zMax;
 
-    // zSlot : milieu vertical de la zone slots (col 3/4)
-    // La colonne fait ~412px de haut, header=14px, les slots occupent le reste
-    // Le milieu des slots est à ~55% du travel total
-    var zSlot = zDown * 0.55;
+    // Positions verticales clés (en px dans l'espace Z du travel)
+    var zUp     = 2;              // position haute (parking)
+    var zDown   = G.zMax;
+    var zSlot   = zDown * 0.52;  // mi-hauteur des casiers (col 3/4)
+    var zPickup = zDown * 0.72;  // zone de cueillette (col 2, bas)
 
-    // zPickup : zone cueillette (col 2, bas) — à ~78% du travel
-    // La cueillette est dans la moitié inférieure de la col cueillette
-    var zPickup = zDown * 0.78;
+    // near() : X en fractions 0-1, Z en pixels
+    function nearX(a,b){ return Math.abs(a-b) < 0.028; }
+    function nearZ(a,b){ return Math.abs(a-b) < 12; }
 
-    function near(a,b,d){ return Math.abs(a-b)<(d||0.025); }
-
-    // Détection changement de phase pour sons
+    // Sons sur transition de phase
     if(G.phase !== G.prevPhase) {
       if(G.phase==='toSlot' || G.phase==='toPickup' || G.phase==='returnMove') soundMotorStart();
-      if(G.phase==='toPark' || G.phase==='idle') soundMotorStop();
-      if(G.phase==='toPickup' && G.prevPhase==='toSlot') soundPickupGrab();
-      if(G.phase==='waitPickup') soundPickupDrop();
+      if(G.phase==='toPark' || G.phase==='idle')   soundMotorStop();
+      if(G.phase==='toSlot'  && G.prevPhase==='idle')      soundMotorStart();
+      if(G.phase==='toPickup' && G.prevPhase==='toSlot')   soundPickupGrab();
+      if(G.phase==='waitPickup')                             soundPickupDrop();
       G.prevPhase = G.phase;
     }
 
+    // ── IDLE : garer le robot en haut à gauche, attendre un job ──────────
     if(G.phase==='idle') {
-      G.targetX=0.02; G.targetZ=zUp;
+      G.targetX = 0.02;
+      G.targetZ = zUp;
       if(!window.gantryWaitingPickup && G.timer<=0 && window.gantryQueue.length>0) {
+        COL_X = getColXFracs();          // mesurer les vraies colonnes DOM
         G.currentJob = window.gantryQueue.shift();
-        G.phase='toSlot'; G.timer=40;
-      } else if(G.timer<=0) { G.timer=10; }
+        // Calculer xFrac depuis la zone du job (le slot est déjà vidé dans state)
+        G.currentJob.xFrac = (G.currentJob.zone === 'A') ? COL_X.Z1 : COL_X.Z2;
+        G.phase = 'toSlot';
+        G.timer = 60;
+      } else if(G.timer <= 0) {
+        G.timer = 10;
+      }
 
+    // ── TOSLOT : aller chercher le plateau dans la tablette ───────────────
     } else if(G.phase==='toSlot') {
       G.targetX = G.currentJob.xFrac;
       G.targetZ = zSlot;
-      // Attendre que le robot soit vraiment arrivé (pas de timer minimum)
-      if(near(G.x, G.currentJob.xFrac, 0.02) && near(G.z, zSlot, 6)) {
+      if(nearX(G.x, G.currentJob.xFrac) && nearZ(G.z, zSlot)) {
         G.carrying = true;
         spawnSparks(cx, cy);
-        G.phase='toPickup'; G.timer=15;
+        G.phase = 'grabPause';
+        G.timer = 18;   // bref arrêt visuel (saisie)
       }
 
+    // ── GRABPAUSE : pause de saisie avant départ vers cueillette ─────────
+    } else if(G.phase==='grabPause') {
+      G.targetX = G.currentJob.xFrac;
+      G.targetZ = zSlot;
+      if(G.timer <= 0) {
+        G.phase = 'toPickup';
+      }
+
+    // ── TOPICKUP : amener le plateau à la zone de cueillette ─────────────
     } else if(G.phase==='toPickup') {
       G.targetX = COL_X.pickup;
       G.targetZ = zPickup;
-      if(near(G.x, COL_X.pickup, 0.02) && near(G.z, zPickup, 6)) {
+      if(nearX(G.x, COL_X.pickup) && nearZ(G.z, zPickup)) {
         G.carrying = false;
         showPickupZone(G.currentJob);
-        G.phase='waitPickup'; G.timer=9999;
+        G.phase = 'waitPickup';
+        G.timer = 9999;
       }
 
+    // ── WAITPICKUP : attendre confirmation ou annulation ─────────────────
+    // Le robot reste immobile à la cueillette
     } else if(G.phase==='waitPickup') {
-      G.targetX = 0.02;
-      G.targetZ = zUp;
-      if(!window.gantryWaitingPickup) { G.phase='toPark'; G.timer=10; }
+      G.targetX = COL_X.pickup;   // reste sur place
+      G.targetZ = zPickup;
+      if(!window.gantryWaitingPickup) {
+        // confirmPickup() a été appelé → partir en parking
+        G.phase = 'toPark';
+        G.timer = 10;
+      }
 
+    // ── TOPARK : retourner au parking ─────────────────────────────────────
     } else if(G.phase==='toPark') {
       G.targetX = 0.02;
       G.targetZ = zUp;
-      if(near(G.x, 0.02, 0.02) && near(G.z, zUp, 5)) {
-        G.phase='idle'; G.timer=30;
+      if(nearX(G.x, 0.02) && nearZ(G.z, zUp)) {
+        G.phase = 'idle';
+        G.timer = 20;
       }
 
+    // ── RETURNTOSLOT : aller récupérer le plateau à la cueillette ────────
+    // (annulation par l'usager — cancelPickup() a été appelé)
     } else if(G.phase==='returnToSlot') {
+      // D'abord revenir à la cueillette pour reprendre le plateau
       G.targetX = COL_X.pickup;
       G.targetZ = zPickup;
-      if(near(G.x, COL_X.pickup, 0.02) && near(G.z, zPickup, 6)) {
+      if(nearX(G.x, COL_X.pickup) && nearZ(G.z, zPickup)) {
         G.carrying = true;
         soundPickupGrab();
         spawnSparks(cx, cy);
-        G.phase='returnMove'; G.timer=10;
+        G.phase = 'returnGrabPause';
+        G.timer = 18;
       }
 
+    // ── RETURNGRABPAUSE : pause de reprise avant retour ───────────────────
+    } else if(G.phase==='returnGrabPause') {
+      G.targetX = COL_X.pickup;
+      G.targetZ = zPickup;
+      if(G.timer <= 0) {
+        G.phase = 'returnMove';
+      }
+
+    // ── RETURNMOVE : ramener le plateau dans son casier ───────────────────
     } else if(G.phase==='returnMove') {
       if(G.currentJob) G.targetX = G.currentJob.xFrac;
       G.targetZ = zSlot;
-      if(G.currentJob && near(G.x, G.currentJob.xFrac, 0.02) && near(G.z, zSlot, 6)) {
+      if(G.currentJob && nearX(G.x, G.currentJob.xFrac) && nearZ(G.z, zSlot)) {
         G.carrying = false;
         soundPickupDrop();
-        G.phase='returnDrop'; G.timer=20;
+        G.phase = 'returnDrop';
+        G.timer = 22;
       }
 
+    // ── RETURNDROP : pause de dépôt ───────────────────────────────────────
     } else if(G.phase==='returnDrop') {
-      if(G.timer<=0) {
+      if(G.timer <= 0) {
         if(window.onReturnComplete) window.onReturnComplete();
         G.currentJob = null;
-        G.phase='toPark'; G.timer=10;
+        G.phase = 'toPark';
+        G.timer = 10;
       }
 
+    // ── ASCEND2 : montée de fin (après confirmPickup) ─────────────────────
     } else if(G.phase==='ascend2') {
-      G.targetX=0.02; G.targetZ=zUp;
-      if(G.timer<=0){ G.phase='idle'; G.timer=30; }
+      G.targetX = 0.02;
+      G.targetZ = zUp;
+      if(nearX(G.x, 0.02) && nearZ(G.z, zUp)) {
+        G.phase = 'idle';
+        G.timer = 20;
+      }
     }
 
     requestAnimationFrame(updateGantry);
   }
 
-  setTimeout(updateGantry, 300);
+  // Attendre que le layout soit complètement calculé avant de démarrer
+  setTimeout(function() {
+    COL_X = getColXFracs();
+    updateGantry();
+  }, 800);
 
 })();
 
