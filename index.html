@@ -1648,7 +1648,180 @@ function tickTemperatures() {
 }
 setInterval(tickTemperatures, 4000);
 
-function loadState() {
+// ═══════════════════════════════
+//  SUPABASE CONFIG
+// ═══════════════════════════════
+const SB_URL  = 'https://uwyhrdjlwetcbtskijrs.supabase.co';
+const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV3eWhyZGpsd2V0Y2J0c2tpanJzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1NzMxNjYsImV4cCI6MjA4ODE0OTE2Nn0.NHo_RY4DjTmtkFcjOJ3dFPzNRN1rCwBCDXyIixOSrn4';
+
+// Détecte ?machine=xxx dans l'URL
+const MACHINE_ID = new URLSearchParams(location.search).get('machine') || null;
+const NET_MODE   = !!MACHINE_ID;
+
+async function sbFetch(path, opts) {
+  const res = await fetch(SB_URL + '/rest/v1/' + path, {
+    ...opts,
+    headers: {
+      'apikey': SB_ANON,
+      'Authorization': 'Bearer ' + SB_ANON,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=representation',
+      ...(opts && opts.headers)
+    }
+  });
+  if(!res.ok) { const e = await res.text(); throw new Error(e); }
+  const ct = res.headers.get('content-type') || '';
+  return ct.includes('json') ? res.json() : null;
+}
+
+// ─── Chargement depuis Supabase ──────────────────────────────────────────────
+async function loadFromSupabase() {
+  try {
+    // Machine
+    const machines = await sbFetch('lunch_machines?id=eq.' + MACHINE_ID + '&select=*');
+    if(!machines || !machines.length) throw new Error('Machine introuvable: ' + MACHINE_ID);
+    const machine = machines[0];
+
+    // Zones
+    const zones = await sbFetch('lunch_zones?machine_id=eq.' + MACHINE_ID + '&select=*&order=zone_key');
+
+    // Slots
+    const slots = await sbFetch('lunch_slots?machine_id=eq.' + MACHINE_ID + '&select=*&order=slot_num');
+
+    // Construire state compatible
+    const def = defaultState();
+    const zoneMap = {};
+    zones.forEach(z => {
+      zoneMap[z.zone_key] = {
+        name: z.name,
+        setpoint: z.setpoint,
+        setpointMin: z.setpoint_min,
+        setpointMax: z.setpoint_max,
+        actual: z.actual || z.setpoint,
+        count: z.slot_count
+      };
+    });
+
+    const slotArr = slots.map(s => ({
+      id:          s.slot_num,
+      _db_id:      s.id,
+      zone:        s.zone_key,
+      desc:        s.desc || '',
+      price:       parseFloat(s.price) || 0,
+      photo:       s.photo_url || '',
+      chef:        s.chef || '',
+      prepDate:    s.prep_date || '',
+      ingredients: s.ingredients || '',
+      allergens:   s.allergens || [],
+      calories:    s.calories || 0,
+      proteines:   s.proteines || 0,
+      glucides:    s.glucides || 0,
+      lipides:     s.lipides || 0,
+      reserved:    s.reserved || false,
+      reservedBy:  s.reserved_by || ''
+    }));
+
+    state = {
+      zones:       Object.keys(zoneMap).length ? zoneMap : def.zones,
+      slots:       slotArr.length ? slotArr : def.slots,
+      pin:         machine.pin || '1234',
+      colorRanges: def.colorRanges,
+      boxMax:      def.boxMax,
+      boxCount:    def.boxCount,
+      machineName: machine.name
+    };
+
+    // Afficher le nom de la machine dans la topbar
+    const lbl = document.getElementById('tth-main');
+    if(lbl) lbl.textContent = machine.name;
+
+    showNetBadge('🟢 RÉSEAU', '#5de88c');
+    renderAll();
+  } catch(err) {
+    console.error('Supabase load error:', err);
+    showNetBadge('🔴 HORS-LIGNE', '#e85047');
+    // Fallback localStorage
+    state = loadStateLocal();
+    renderAll();
+  }
+}
+
+// ─── Sauvegarde vers Supabase ────────────────────────────────────────────────
+async function saveSlotToSupabase(slot) {
+  if(!NET_MODE) return;
+  try {
+    const body = {
+      machine_id:  MACHINE_ID,
+      zone_key:    slot.zone,
+      slot_num:    slot.id,
+      desc:        slot.desc,
+      price:       slot.price,
+      photo_url:   slot.photo,
+      chef:        slot.chef,
+      prep_date:   slot.prepDate,
+      ingredients: slot.ingredients,
+      allergens:   slot.allergens,
+      calories:    slot.calories,
+      proteines:   slot.proteines,
+      glucides:    slot.glucides,
+      lipides:     slot.lipides,
+      reserved:    slot.reserved,
+      reserved_by: slot.reservedBy
+    };
+    if(slot._db_id) {
+      // Update
+      await sbFetch('lunch_slots?id=eq.' + slot._db_id, { method:'PATCH', body: JSON.stringify(body) });
+    } else {
+      // Insert
+      const rows = await sbFetch('lunch_slots', { method:'POST', body: JSON.stringify(body) });
+      if(rows && rows[0]) slot._db_id = rows[0].id;
+    }
+  } catch(err) { console.error('saveSlot error:', err); }
+}
+
+async function saveZoneToSupabase(zoneKey) {
+  if(!NET_MODE) return;
+  const z = state.zones[zoneKey];
+  if(!z) return;
+  try {
+    await sbFetch('lunch_zones?machine_id=eq.' + MACHINE_ID + '&zone_key=eq.' + zoneKey, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        name: z.name, setpoint: z.setpoint,
+        setpoint_min: z.setpointMin, setpoint_max: z.setpointMax,
+        actual: z.actual, slot_count: z.count
+      })
+    });
+  } catch(err) { console.error('saveZone error:', err); }
+}
+
+async function saveTransactionToSupabase(slotDbId, buyerName, price) {
+  if(!NET_MODE) return;
+  try {
+    await sbFetch('lunch_transactions', {
+      method: 'POST',
+      body: JSON.stringify({ machine_id: MACHINE_ID, slot_id: slotDbId, buyer_name: buyerName, price: price })
+    });
+  } catch(err) { console.error('saveTransaction error:', err); }
+}
+
+// Badge mode réseau dans la topbar
+function showNetBadge(txt, color) {
+  let badge = document.getElementById('net-badge');
+  if(!badge) {
+    badge = document.createElement('div');
+    badge.id = 'net-badge';
+    badge.style.cssText = 'font-family:monospace;font-size:9px;padding:2px 6px;border-radius:2px;background:rgba(0,0,0,.5);border:1px solid;flex-shrink:0;';
+    const topbar = document.querySelector('#screen-home .topbar');
+    if(topbar) topbar.insertBefore(badge, topbar.lastChild);
+  }
+  badge.textContent = txt;
+  badge.style.color = color;
+  badge.style.borderColor = color;
+}
+
+// ─── LocalStorage (mode local) ───────────────────────────────────────────────
+function loadStateLocal() {
   try {
     const s = localStorage.getItem('mlstate');
     if(s) {
@@ -1657,22 +1830,16 @@ function loadState() {
       ZONE_IDS.forEach(id => {
         if(!parsed.zones[id]) { parsed.zones[id] = def.zones[id]; return; }
         parsed.zones[id].name = ZONE_NAMES[id];
-        if(parsed.zones[id].actual === undefined) parsed.zones[id].actual = parsed.zones[id].setpoint ?? parsed.zones[id].temp ?? def.zones[id].setpoint;
-        if(parsed.zones[id].setpoint === undefined) parsed.zones[id].setpoint = parsed.zones[id].temp ?? def.zones[id].setpoint;
+        if(parsed.zones[id].actual === undefined) parsed.zones[id].actual = parsed.zones[id].setpoint ?? def.zones[id].setpoint;
+        if(parsed.zones[id].setpoint === undefined) parsed.zones[id].setpoint = def.zones[id].setpoint;
         if(parsed.zones[id].setpointMin === undefined) parsed.zones[id].setpointMin = def.zones[id].setpointMin;
         if(parsed.zones[id].setpointMax === undefined) parsed.zones[id].setpointMax = def.zones[id].setpointMax;
-        // Remove old per-zone ranges if present (migrated to global)
         delete parsed.zones[id].ranges;
       });
-      // Ensure global colorRanges exists
       if(!parsed.colorRanges) parsed.colorRanges = def.colorRanges;
       COLOR_BANDS.forEach(b => { if(!parsed.colorRanges[b.key]) parsed.colorRanges[b.key] = def.colorRanges[b.key]; });
-      // Remove old 'orange' key if it was in old position (now reordered) — data preserved
-
-      // Migrate boxCount/boxMax
       if(parsed.boxMax === undefined) parsed.boxMax = def.boxMax;
       if(parsed.boxCount === undefined) parsed.boxCount = def.boxMax;
-      // Migrate slots: add price if missing + nouveaux champs fiche détail
       if(parsed.slots) parsed.slots.forEach(s => {
         if(s.price === undefined) s.price = 0;
         if(s.photo === undefined) s.photo = '';
@@ -1690,7 +1857,23 @@ function loadState() {
   } catch(e) {}
   return defaultState();
 }
-function saveState() { try { localStorage.setItem('mlstate', JSON.stringify(state)); } catch(e) {} }
+
+function loadState() {
+  return loadStateLocal(); // appelé sync au boot, Supabase charge après
+}
+
+function saveState() {
+  // Toujours sauver local comme cache
+  try { localStorage.setItem('mlstate', JSON.stringify(state)); } catch(e) {}
+}
+
+function renderAll() {
+  renderGrid();
+  renderHomeStats();
+  renderMachineSlots();
+  renderTempStrips();
+  renderMachineZoneOverlays();
+}
 
 // Load saved language
 try { const sl = localStorage.getItem('mllang'); if(sl && LANGS[sl]) lang = sl; } catch(e) {}
@@ -2111,6 +2294,8 @@ function confirmReservation() {
 
   // Decrement box count
   if(state.boxCount > 0) state.boxCount--;
+  // Capturer db_id avant de vider le slot
+  const slotDbId = slot._db_id;
   // Clear slot
   slot.desc = '';
   slot.price = 0;
@@ -2118,6 +2303,10 @@ function confirmReservation() {
   slot.reservedBy = '';
 
   saveState();
+  if(NET_MODE) {
+    saveSlotToSupabase(slot);
+    saveTransactionToSupabase(slotDbId, buyer, price);
+  }
   closeNameModal();
   renderGrid();
   renderHomeStats();
@@ -2616,7 +2805,9 @@ function saveSlotDesc() {
   slot.glucides     = parseFloat(document.getElementById('admin-slot-glucides').value)  || 0;
   slot.lipides      = parseFloat(document.getElementById('admin-slot-lipides').value)   || 0;
   slot.allergens    = getCheckedAllergens();
-  saveState(); renderAdminCases(); renderMachineSlots(); renderHomeStats(); flashSave();
+  saveState();
+  if(NET_MODE) saveSlotToSupabase(slot);
+  renderAdminCases(); renderMachineSlots(); renderHomeStats(); flashSave();
 }
 
 function clearSlotDesc() {
@@ -2635,7 +2826,9 @@ function clearSlotDesc() {
   var prev = document.getElementById('admin-photo-preview');
   if(prev) { prev.style.display='none'; prev.src=''; }
   buildAllergenGrid([]);
-  saveState(); renderAdminCases(); renderMachineSlots(); renderHomeStats(); flashSave();
+  saveState();
+  if(NET_MODE) saveSlotToSupabase(slot);
+  renderAdminCases(); renderMachineSlots(); renderHomeStats(); flashSave();
 }
 function returnBox() {
   if(state.boxCount >= state.boxMax) return;
@@ -2871,6 +3064,14 @@ renderMachineZoneOverlays();
 renderHomeStats();
 renderMachineSlots();
 renderLangBtns();
+
+// Mode réseau : charger depuis Supabase
+if(NET_MODE) {
+  showNetBadge('⏳ CONNEXION…', '#4fa3e8');
+  loadFromSupabase();
+} else {
+  showNetBadge('💾 LOCAL', '#888');
+}
 
 // ═════════════════════════window.gantryQueue = window.gantryQueue || [];
 window.gantryWaitingPickup = false;
