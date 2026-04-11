@@ -3874,45 +3874,51 @@ updateAdminBtn();
 // URL format: ?machine=xxx&chtoken=ACCESS_TOKEN
 (async function() {
   const urlToken = new URLSearchParams(location.search).get('chtoken');
-  if(!urlToken || !NET_MODE) return;
+  if(!urlToken || !NET_MODE) {
+    console.log('[chtoken] absent ou pas NET_MODE. urlToken=', !!urlToken, 'NET_MODE=', NET_MODE);
+    return;
+  }
+  console.log('[chtoken] token détecté, longueur:', urlToken.length);
 
   // Nettoyer le token de l'URL immédiatement
   const cleanUrl = location.pathname + '?machine=' + MACHINE_ID;
   history.replaceState(null, '', cleanUrl);
 
   try {
-    // Valider le token via l'endpoint auth Supabase pour obtenir l'user_id
+    // Valider le token via l'endpoint auth Supabase
     const authRes = await fetch(CH_URL + '/auth/v1/user', {
       headers: { 'apikey': CH_ANON, 'Authorization': 'Bearer ' + urlToken }
     });
-    if(!authRes.ok) return;
+    console.log('[chtoken] /auth/v1/user status:', authRes.status);
+    if(!authRes.ok) { console.warn('[chtoken] auth échoué'); return; }
     const authData = await authRes.json();
     const userId = authData.id;
-    if(!userId) return;
+    console.log('[chtoken] userId:', userId);
+    if(!userId) { console.warn('[chtoken] pas de userId'); return; }
 
-    // Charger le profil avec l'user_id connu
     const profiles = await chFetch(
       'profiles?id=eq.' + userId + '&select=id,full_name,unit,role,is_active,resident_plan,resident_plan_until',
       {}, urlToken
     );
+    console.log('[chtoken] profiles:', profiles);
     const profile = Array.isArray(profiles) && profiles[0];
-    if(!profile) return;
-    if(profile.is_active === false) return;
+    if(!profile) { console.warn('[chtoken] profil introuvable'); return; }
+    if(profile.is_active === false) { console.warn('[chtoken] compte inactif'); return; }
     const plan = profile.resident_plan;
-    if(!plan || plan === 'none') return;
-    if(profile.resident_plan_until && new Date(profile.resident_plan_until) < new Date()) return;
+    if(!plan || plan === 'none') { console.warn('[chtoken] pas de forfait:', plan); return; }
+    if(profile.resident_plan_until && new Date(profile.resident_plan_until) < new Date()) { console.warn('[chtoken] forfait expiré'); return; }
 
-    // Charger les dépendants avec allow_lunch
     const deps = await chFetch(
       'dependents?parent_id=eq.' + userId + '&allow_lunch=eq.true&select=id,name,age&order=name',
       {}, urlToken
     );
     lunchSession = { profile, dependents: Array.isArray(deps) ? deps : [], token: urlToken };
+    console.log('[chtoken] session créée pour:', profile.full_name);
     resetLunchSessionTimer();
     updateAdminBtn();
     queueRender();
     queueJoin();
-  } catch(e) { console.warn('chtoken auto-login:', e); }
+  } catch(e) { console.error('[chtoken] erreur:', e); }
 })();
 
 // Mode réseau : charger depuis Supabase
