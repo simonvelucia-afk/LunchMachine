@@ -971,15 +971,6 @@
             <span id="edit-slot-label" style="font-family:'Space Mono',monospace;font-size:12px;color:var(--accent)"></span>
           </div>
 
-          <!-- Repas préfabriqués (insertion rapide) -->
-          <div style="margin-bottom:8px;padding:7px 8px;background:var(--bg);border:1px solid var(--border);">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">
-              <div class="admin-field-label" style="margin:0;">⚡ Insertion rapide — repas enregistrés</div>
-              <button class="btn accent2" onclick="openPresetManager()" style="font-size:10px;padding:2px 8px;">⚙ Gérer</button>
-            </div>
-            <div id="preset-meals-grid" style="display:flex;flex-wrap:wrap;gap:3px;"></div>
-          </div>
-
           <!-- Ligne 1 : description + prix -->
           <div style="display:flex;gap:8px;margin-bottom:6px;">
             <div style="flex:1;">
@@ -1103,20 +1094,10 @@
           <div class="admin-section-title" style="margin-bottom:10px;">Contrôle Gantry</div>
 
           <!-- Mode toggle -->
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;padding:8px;background:var(--bg);border:1px solid var(--border);">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;padding:8px;background:var(--bg);border:1px solid var(--border);">
             <button id="gantry-mode-auto" onclick="setGantryMode('auto')" class="btn accent" style="font-size:11px;padding:4px 10px;">⚙ AUTO</button>
             <button id="gantry-mode-manual" onclick="setGantryMode('manual')" class="btn" style="font-size:11px;padding:4px 10px;">✋ MANUEL</button>
             <div id="gantry-mode-label" style="font-family:'Space Mono',monospace;font-size:10px;color:var(--accent);">AUTO</div>
-          </div>
-
-          <!-- Vitesse AUTO -->
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;padding:7px 10px;background:var(--bg);border:1px solid var(--border);">
-            <span style="font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text-faint);flex-shrink:0;">VITESSE AUTO</span>
-            <input type="range" id="gantry-auto-speed" min="1" max="10" value="5"
-              style="flex:1;accent-color:var(--accent);"
-              oninput="setGantryAutoSpeed(+this.value)">
-            <span id="gantry-auto-speed-val" style="font-family:'Space Mono',monospace;font-size:11px;color:var(--accent);width:14px;text-align:right;">5</span>
-            <button class="btn" onclick="saveGantrySpeed()" style="font-size:10px;padding:3px 8px;flex-shrink:0;">💾</button>
           </div>
 
           <!-- État -->
@@ -1313,39 +1294,6 @@
     <div class="sf-icon" id="sf-icon">✓</div>
     <div class="sf-msg" id="sf-msg">Achat confirmé</div>
     <div class="sf-sub" id="sf-sub"></div>
-  </div>
-
-  <!-- PRESET MANAGER MODAL -->
-  <div class="modal-overlay" id="preset-manager-modal" style="z-index:200;">
-    <div class="modal" style="width:480px;max-height:440px;">
-      <div class="modal-header">
-        <div class="modal-title">⚡ Menus préfabriqués</div>
-        <button class="btn" onclick="closePresetManager()" style="font-size:11px;padding:4px 10px;">✕ Fermer</button>
-      </div>
-      <div class="modal-body" style="padding:10px;gap:6px;overflow-y:auto;">
-        <div id="preset-list" style="display:flex;flex-direction:column;gap:5px;"></div>
-        <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
-          <div class="admin-field-label" style="margin-bottom:4px;">Ajouter un nouveau repas</div>
-          <div style="display:flex;gap:5px;margin-bottom:4px;">
-            <input id="pm-emoji" type="text" placeholder="🍽" maxlength="2" style="width:36px;padding:4px;background:var(--bg);border:1px solid var(--border);color:var(--text);font-size:16px;text-align:center;">
-            <input id="pm-label" type="text" placeholder="Nom court" style="flex:1;padding:4px 6px;background:var(--bg);border:1px solid var(--border);color:var(--text);font-size:12px;">
-            <input id="pm-price" type="number" placeholder="0.00" min="0" step="0.25" style="width:65px;padding:4px 5px;background:var(--bg);border:1px solid var(--border);color:var(--text);font-size:12px;">
-          </div>
-          <textarea id="pm-desc" rows="2" placeholder="Description complète du plat..." style="width:100%;padding:4px 6px;background:var(--bg);border:1px solid var(--border);color:var(--text);font-size:12px;resize:none;margin-bottom:4px;"></textarea>
-          <div style="display:flex;gap:5px;margin-bottom:4px;">
-            <input id="pm-cal"  type="number" placeholder="kcal" min="0" style="flex:1;padding:4px 5px;background:var(--bg);border:1px solid var(--border);color:var(--text);font-size:11px;">
-            <input id="pm-prot" type="number" placeholder="Prot g" min="0" style="flex:1;padding:4px 5px;background:var(--bg);border:1px solid var(--border);color:var(--text);font-size:11px;">
-            <input id="pm-gluc" type="number" placeholder="Gluc g" min="0" style="flex:1;padding:4px 5px;background:var(--bg);border:1px solid var(--border);color:var(--text);font-size:11px;">
-            <input id="pm-lip"  type="number" placeholder="Lip g"  min="0" style="flex:1;padding:4px 5px;background:var(--bg);border:1px solid var(--border);color:var(--text);font-size:11px;">
-          </div>
-          <div style="margin-bottom:6px;">
-            <div style="font-size:10px;color:var(--text-faint);margin-bottom:3px;">Allergènes</div>
-            <div id="pm-allergen-grid" style="display:flex;flex-wrap:wrap;gap:3px;"></div>
-          </div>
-          <button class="btn accent" onclick="addPresetMeal()" style="font-size:11px;padding:5px 14px;">+ Ajouter</button>
-        </div>
-      </div>
-    </div>
   </div>
 
 </div>
@@ -1683,19 +1631,7 @@ function defaultState() {
     orange: { min:26,  max:55  },
     red:    { min:56,  max:100 },
   };
-  const presetMeals = [
-    { id:1, emoji:'🍗', label:'Poulet rôti',     desc:'Poulet rôti, légumes grillés, riz basmati',          price:9.50,  allergens:[],              cal:520, prot:38, gluc:42, lip:14 },
-    { id:2, emoji:'🥩', label:'Bœuf & légumes', desc:'Bœuf braisé, carottes, pommes de terre, jus brun',   price:11.00, allergens:[],              cal:610, prot:41, gluc:35, lip:22 },
-    { id:3, emoji:'🐟', label:'Saumon grillé',  desc:'Saumon grillé, quinoa, épinards, citron',             price:12.50, allergens:['Poisson'],     cal:490, prot:36, gluc:28, lip:20 },
-    { id:4, emoji:'🥗', label:'Bowl végé',      desc:'Bowl légumes rôtis, pois chiches, houmous, taboulé',  price:8.50,  allergens:['Sésame'],      cal:420, prot:18, gluc:52, lip:12 },
-    { id:5, emoji:'🍝', label:'Pasta poulet',   desc:'Pâtes penne, poulet, sauce tomate basilic, parmesan', price:9.00,  allergens:['Gluten','Lait'],cal:580, prot:32, gluc:65, lip:16 },
-    { id:6, emoji:'🥘', label:'Chili con carne',desc:'Chili con carne, haricots rouges, riz, crème sure',   price:8.75,  allergens:['Lait'],        cal:550, prot:28, gluc:48, lip:18 },
-    { id:7, emoji:'🍛', label:'Curry légumes',  desc:'Curry de légumes, lait de coco, riz basmati',         price:8.00,  allergens:['Lait'],        cal:470, prot:12, gluc:62, lip:16 },
-    { id:8, emoji:'🫕', label:'Soupe repas',    desc:'Soupe minestrone, légumes, vermicelles, pain',        price:7.00,  allergens:['Gluten'],      cal:320, prot:14, gluc:44, lip:8  },
-    { id:9, emoji:'🥙', label:'Wrap dinde',     desc:'Wrap blé entier, dinde grillée, avocat, salsa',       price:9.25,  allergens:['Gluten'],      cal:490, prot:30, gluc:40, lip:18 },
-    { id:10,emoji:'🍱', label:'Bento mixte',    desc:'Riz, edamame, poulet teriyaki, crudités, sauce soya', price:10.50, allergens:['Soya','Gluten'],cal:530, prot:33, gluc:55, lip:14 },
-  ];
-  return { zones, slots, pin:'1234', colorRanges, boxMax:30, boxCount:30, gantrySpeed:5, presetMeals };;
+  return { zones, slots, pin:'1234', colorRanges, boxMax:30, boxCount:30 };
 }
 
 // Simulate slow drift of actual temperature toward setpoint
@@ -1902,8 +1838,6 @@ function loadStateLocal() {
       COLOR_BANDS.forEach(b => { if(!parsed.colorRanges[b.key]) parsed.colorRanges[b.key] = def.colorRanges[b.key]; });
       if(parsed.boxMax === undefined) parsed.boxMax = def.boxMax;
       if(parsed.boxCount === undefined) parsed.boxCount = def.boxMax;
-      if(parsed.gantrySpeed === undefined) parsed.gantrySpeed = def.gantrySpeed;
-      if(!parsed.presetMeals || !parsed.presetMeals.length) parsed.presetMeals = def.presetMeals;
       if(parsed.slots) parsed.slots.forEach(s => {
         if(s.price === undefined) s.price = 0;
         if(s.photo === undefined) s.photo = '';
@@ -2576,33 +2510,8 @@ function clearGantryQueue() {
   renderAdminGantry();
 }
 
-function setGantryAutoSpeed(val) {
-  val = Math.max(1, Math.min(10, +val));
-  var el = document.getElementById('gantry-auto-speed-val');
-  if(el) el.textContent = val;
-  // Appliquer immédiatement au gantry
-  if(window.G) window.G.autoSpeed = val;
-}
-
-function saveGantrySpeed() {
-  var slider = document.getElementById('gantry-auto-speed');
-  if(!slider) return;
-  var val = +slider.value;
-  state.gantrySpeed = val;
-  saveState();
-  if(window.G) window.G.autoSpeed = val;
-  flashSave();
-}
-
 function renderAdminGantry() {
   setGantryMode(_gantryMode);
-  // Populate speed slider from state
-  var spd = state.gantrySpeed || 5;
-  var sl = document.getElementById('gantry-auto-speed');
-  var vl = document.getElementById('gantry-auto-speed-val');
-  if(sl) sl.value = spd;
-  if(vl) vl.textContent = spd;
-  if(window.G) window.G.autoSpeed = spd;
 
   // Injecter le machine-interactive dans la colonne preview
   const liveView = document.getElementById('gantry-live-view');
@@ -2852,7 +2761,6 @@ function selectAdminSlot(id) {
   const slot = state.slots.find(s=>s.id===id);
   document.getElementById('admin-slot-edit').classList.add('active');
   document.getElementById('edit-slot-label').textContent = `Case #${id} — Zone ${slot.zone} (${state.zones[slot.zone]?.name})`;
-  renderPresetMeals();
 
   // Champs existants
   document.getElementById('admin-slot-desc').value    = slot.desc    || '';
@@ -3167,167 +3075,6 @@ if(NET_MODE) {
   showNetBadge('💾 LOCAL', '#888');
 }
 
-// ═══════════════════════════════
-//  MENUS PRÉFABRIQUÉS
-// ═══════════════════════════════
-
-function renderPresetMeals() {
-  var grid = document.getElementById('preset-meals-grid');
-  if(!grid) return;
-  grid.innerHTML = '';
-  var meals = (state.presetMeals || []);
-  if(!meals.length) {
-    grid.innerHTML = '<span style="font-size:10px;color:var(--text-faint);">Aucun repas enregistré — cliquer ⚙ Gérer pour en ajouter.</span>';
-    return;
-  }
-  meals.forEach(function(meal) {
-    var btn = document.createElement('button');
-    btn.style.cssText = 'background:var(--surface);border:1px solid var(--border);color:var(--text-dim);font-family:"Barlow Condensed",sans-serif;font-size:11px;font-weight:600;letter-spacing:.04em;padding:3px 8px;cursor:pointer;display:flex;align-items:center;gap:4px;white-space:nowrap;transition:border-color .15s,color .15s;';
-    btn.innerHTML = '<span style="font-size:13px;">' + (meal.emoji||'🍽') + '</span><span>' + (meal.label||'Repas') + '</span>';
-    btn.onmouseenter = function(){ btn.style.borderColor='var(--accent)'; btn.style.color='var(--accent)'; };
-    btn.onmouseleave = function(){ btn.style.borderColor='var(--border)'; btn.style.color='var(--text-dim)'; };
-    btn.onclick = function() { applyPresetMeal(meal); };
-    grid.appendChild(btn);
-  });
-}
-
-function applyPresetMeal(meal) {
-  var desc  = document.getElementById('admin-slot-desc');
-  var price = document.getElementById('admin-slot-price');
-  var cal   = document.getElementById('admin-slot-calories');
-  var prot  = document.getElementById('admin-slot-proteines');
-  var gluc  = document.getElementById('admin-slot-glucides');
-  var lip   = document.getElementById('admin-slot-lipides');
-  if(desc)  desc.value  = meal.desc  || '';
-  if(price) price.value = (meal.price||0).toFixed(2);
-  if(cal)   cal.value   = meal.cal   || '';
-  if(prot)  prot.value  = meal.prot  || '';
-  if(gluc)  gluc.value  = meal.gluc  || '';
-  if(lip)   lip.value   = meal.lip   || '';
-  buildAllergenGrid(meal.allergens || []);
-  if(desc) {
-    desc.style.borderColor = 'var(--accent)';
-    setTimeout(function(){ desc.style.borderColor = ''; }, 600);
-  }
-}
-
-// ── Gestionnaire de menus (modal) ──────────────────────────────────────
-var ALLERGEN_LIST_PM = ['Gluten','Lait','Œufs','Poisson','Crustacés','Arachides','Noix','Soya','Sésame','Moutarde','Sulfites','Céleri','Lupin','Mollusques'];
-
-function openPresetManager() {
-  if(!state.presetMeals) state.presetMeals = [];
-  renderPresetList();
-  buildPmAllergenGrid([]);
-  // Clear add form
-  ['pm-emoji','pm-label','pm-desc','pm-cal','pm-prot','pm-gluc','pm-lip'].forEach(function(id){
-    var el = document.getElementById(id); if(el) el.value = '';
-  });
-  document.getElementById('pm-price').value = '0.00';
-  document.getElementById('preset-manager-modal').classList.add('active');
-}
-
-function closePresetManager() {
-  document.getElementById('preset-manager-modal').classList.remove('active');
-  renderPresetMeals(); // rafraîchir les boutons rapides
-}
-
-function renderPresetList() {
-  var list = document.getElementById('preset-list');
-  if(!list) return;
-  list.innerHTML = '';
-  var meals = state.presetMeals || [];
-  if(!meals.length) {
-    list.innerHTML = '<div style="font-size:11px;color:var(--text-faint);padding:4px;">Aucun repas enregistré.</div>';
-    return;
-  }
-  meals.forEach(function(meal, idx) {
-    var row = document.createElement('div');
-    row.style.cssText = 'display:flex;align-items:center;gap:6px;padding:5px 7px;background:var(--surface);border:1px solid var(--border);';
-    row.innerHTML =
-      '<span style="font-size:15px;flex-shrink:0;">' + (meal.emoji||'🍽') + '</span>' +
-      '<div style="flex:1;min-width:0;">' +
-        '<div style="font-family:'Barlow Condensed',sans-serif;font-size:12px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + (meal.label||'Repas') + '</div>' +
-        '<div style="font-size:10px;color:var(--text-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + (meal.desc||'').substring(0,50) + '</div>' +
-      '</div>' +
-      '<span style="font-family:'Space Mono',monospace;font-size:11px;color:var(--accent);flex-shrink:0;">' + (meal.price||0).toFixed(2) + '$</span>' +
-      '<button class="btn" onclick="editPresetMeal(' + idx + ')" style="font-size:10px;padding:2px 7px;flex-shrink:0;">✏</button>' +
-      '<button class="btn accent3" onclick="deletePresetMeal(' + idx + ')" style="font-size:10px;padding:2px 7px;flex-shrink:0;">✕</button>';
-    list.appendChild(row);
-  });
-}
-
-function buildPmAllergenGrid(selected) {
-  var grid = document.getElementById('pm-allergen-grid');
-  if(!grid) return;
-  grid.innerHTML = '';
-  ALLERGEN_LIST_PM.forEach(function(a) {
-    var checked = (selected||[]).indexOf(a) >= 0;
-    var div = document.createElement('div');
-    div.className = 'allergen-check' + (checked ? ' checked' : '');
-    div.dataset.allergen = a;
-    div.innerHTML = '<span>' + a + '</span>';
-    div.onclick = function() { div.classList.toggle('checked'); };
-    grid.appendChild(div);
-  });
-}
-
-function getPmCheckedAllergens() {
-  return Array.from(document.querySelectorAll('#pm-allergen-grid .allergen-check.checked'))
-    .map(function(d){ return d.dataset.allergen; });
-}
-
-function addPresetMeal() {
-  var emoji = (document.getElementById('pm-emoji').value||'🍽').trim();
-  var label = (document.getElementById('pm-label').value||'').trim();
-  var desc  = (document.getElementById('pm-desc').value||'').trim();
-  var price = parseFloat(document.getElementById('pm-price').value) || 0;
-  var cal   = parseFloat(document.getElementById('pm-cal').value)   || 0;
-  var prot  = parseFloat(document.getElementById('pm-prot').value)  || 0;
-  var gluc  = parseFloat(document.getElementById('pm-gluc').value)  || 0;
-  var lip   = parseFloat(document.getElementById('pm-lip').value)   || 0;
-  if(!label && !desc) return;
-  if(!state.presetMeals) state.presetMeals = [];
-  var nextId = (state.presetMeals.reduce(function(m,x){ return Math.max(m,x.id||0); },0)) + 1;
-  state.presetMeals.push({ id:nextId, emoji:emoji, label:label||desc.substring(0,20), desc:desc, price:price, allergens:getPmCheckedAllergens(), cal:cal, prot:prot, gluc:gluc, lip:lip });
-  saveState();
-  // Clear form
-  ['pm-emoji','pm-label','pm-desc','pm-cal','pm-prot','pm-gluc','pm-lip'].forEach(function(id){
-    var el = document.getElementById(id); if(el) el.value = '';
-  });
-  document.getElementById('pm-price').value = '0.00';
-  buildPmAllergenGrid([]);
-  renderPresetList();
-}
-
-function deletePresetMeal(idx) {
-  if(!state.presetMeals) return;
-  state.presetMeals.splice(idx, 1);
-  saveState();
-  renderPresetList();
-}
-
-function editPresetMeal(idx) {
-  var meal = state.presetMeals && state.presetMeals[idx];
-  if(!meal) return;
-  // Populate form fields for editing, then delete and re-add on save
-  document.getElementById('pm-emoji').value = meal.emoji  || '';
-  document.getElementById('pm-label').value = meal.label  || '';
-  document.getElementById('pm-desc').value  = meal.desc   || '';
-  document.getElementById('pm-price').value = (meal.price||0).toFixed(2);
-  document.getElementById('pm-cal').value   = meal.cal    || '';
-  document.getElementById('pm-prot').value  = meal.prot   || '';
-  document.getElementById('pm-gluc').value  = meal.gluc   || '';
-  document.getElementById('pm-lip').value   = meal.lip    || '';
-  buildPmAllergenGrid(meal.allergens || []);
-  // Remove the old entry so "Ajouter" replaces it
-  state.presetMeals.splice(idx, 1);
-  saveState();
-  renderPresetList();
-  // Scroll to the add form
-  var addForm = document.querySelector('#preset-manager-modal .modal-body > div:last-child');
-  if(addForm) addForm.scrollIntoView({ behavior:'smooth' });
-}
-
 // ═════════════════════════window.gantryQueue = window.gantryQueue || [];
 window.gantryWaitingPickup = false;
 
@@ -3481,8 +3228,7 @@ window.gantryWaitingPickup = false;
     phase: 'idle', timer: 60,
     prevPhase: 'idle',
     currentJob: null,
-    W:0, H:0, zMax:0,
-    autoSpeed: 5            // 1=très lent … 10=très rapide, contrôlé par admin
+    W:0, H:0, zMax:0
   };
 
   // Lerp springy — plus fluide que lerp simple
@@ -3579,13 +3325,10 @@ window.gantryWaitingPickup = false;
       return;
     }
 
-    // ── Spring normal — stiffness pilotée par G.autoSpeed (1-10) ────
-    var _spd = Math.max(1, Math.min(10, G.autoSpeed || 5));
-    var _stiff = 0.04 + (_spd - 1) / 9 * 0.34;   // 0.04 (speed1) → 0.38 (speed10)
-    var _damp  = 0.76 + (_spd - 1) / 9 * 0.04;   // 0.76 → 0.80  (légèrement + stable à haute vitesse)
-    var sx = springStep(G.x, G.targetX, G.vx, _stiff, _damp);
+    // ── Spring normal — stiffness suffisante pour voir le mouvement ────
+    var sx = springStep(G.x, G.targetX, G.vx, 0.18, 0.78);
     G.vx = sx.v; G.x = sx.p;
-    var sz = springStep(G.z, G.targetZ, G.vz, _stiff * 0.9, _damp);
+    var sz = springStep(G.z, G.targetZ, G.vz, 0.16, 0.79);
     G.vz = sz.v; G.z = sz.p;
     var cx = PAD + G.x*(W-PAD*2);
     var cy = TRAVEL_TOP + G.z + RUNNER_H;
@@ -3787,10 +3530,6 @@ window.gantryWaitingPickup = false;
   // Attendre que le layout soit complètement calculé avant de démarrer
   setTimeout(function() {
     COL_X = getColXFracs();
-    // Charger la vitesse sauvegardée
-    if(typeof state !== 'undefined' && state.gantrySpeed) {
-      G.autoSpeed = state.gantrySpeed;
-    }
     updateGantry();
   }, 800);
 
