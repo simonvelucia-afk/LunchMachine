@@ -2597,7 +2597,11 @@ async function chFetch(path, opts, token) {
       ...(opts && opts.headers)
     }
   });
-  if(!res.ok) { const e = await res.text(); throw new Error(e); }
+  if(!res.ok) {
+    const e = await res.text();
+    console.warn('[chFetch] ' + res.status + ' on ' + path + ':', e.substring(0,200));
+    throw new Error(e);
+  }
   const ct = res.headers.get('content-type') || '';
   return ct.includes('json') ? res.json() : null;
 }
@@ -3873,52 +3877,62 @@ updateAdminBtn();
 // ─── Auto-login via token passé dans l'URL depuis CoHabitat ──────────────────
 // URL format: ?machine=xxx&chtoken=ACCESS_TOKEN
 (async function() {
-  const urlToken = new URLSearchParams(location.search).get('chtoken');
+  const params   = new URLSearchParams(location.search);
+  const urlToken = params.get('chtoken');
+  const urlUid   = params.get('chuid');
   if(!urlToken || !NET_MODE) {
     console.log('[chtoken] absent ou pas NET_MODE');
     return;
   }
-  console.log('[chtoken] token détecté, longueur:', urlToken.length);
+  console.log('[chtoken] token détecté, longueur:', urlToken.length, 'uid param:', urlUid);
 
-  // Nettoyer le token de l'URL immédiatement
+  // Nettoyer les params sensibles de l'URL immédiatement
   history.replaceState(null, '', location.pathname + '?machine=' + MACHINE_ID);
 
   try {
-    // Décoder le JWT localement (pas besoin de vérifier la signature)
-    const parts = urlToken.split('.');
-    if(parts.length !== 3) { console.warn('[chtoken] JWT invalide'); return; }
-    const payload = JSON.parse(atob(parts[1].replace(/-/g,'+').replace(/_/g,'/')));
-    const userId = payload.sub;
-    const exp    = payload.exp;
-    console.log('[chtoken] userId:', userId, 'exp:', new Date(exp*1000).toISOString());
-    if(!userId) { console.warn('[chtoken] pas de sub dans le JWT'); return; }
-    if(exp && exp < Date.now()/1000) { console.warn('[chtoken] token expiré'); return; }
+    // Décoder le JWT pour obtenir le user_id (fallback: utiliser chuid de l'URL)
+    let userId = urlUid || null;
+    try {
+      const parts = urlToken.split('.');
+      if(parts.length === 3) {
+        const payload = JSON.parse(atob(parts[1].replace(/-/g,'+').replace(/_/g,'/')));
+        if(payload.sub) userId = payload.sub;
+        const exp = payload.exp;
+        console.log('[chtoken] JWT sub:', userId, 'exp:', new Date((exp||0)*1000).toISOString());
+        if(exp && exp < Date.now()/1000) { console.warn('[chtoken] token expiré'); return; }
+      }
+    } catch(jwtErr) {
+      console.warn('[chtoken] JWT decode error:', jwtErr);
+    }
 
-    // Charger le profil directement avec l'user_id
+    if(!userId) { console.warn('[chtoken] userId introuvable'); return; }
+
+    // Charger le profil
     const profiles = await chFetch(
       'profiles?id=eq.' + userId + '&select=id,full_name,unit,role,is_active,resident_plan,resident_plan_until',
       {}, urlToken
     );
-    console.log('[chtoken] profiles:', profiles);
+    console.log('[chtoken] profiles result:', JSON.stringify(profiles));
     const profile = Array.isArray(profiles) && profiles[0];
-    if(!profile) { console.warn('[chtoken] profil introuvable'); return; }
+    if(!profile) { console.warn('[chtoken] profil introuvable — vérifier RLS profiles'); return; }
     if(profile.is_active === false) { console.warn('[chtoken] compte inactif'); return; }
     const plan = profile.resident_plan;
     if(!plan || plan === 'none') { console.warn('[chtoken] pas de forfait:', plan); return; }
-    if(profile.resident_plan_until && new Date(profile.resident_plan_until) < new Date()) { console.warn('[chtoken] forfait expiré'); return; }
+    if(profile.resident_plan_until && new Date(profile.resident_plan_until) < new Date()) {
+      console.warn('[chtoken] forfait expiré'); return;
+    }
 
-    // Charger les dépendants avec allow_lunch
     const deps = await chFetch(
       'dependents?parent_id=eq.' + userId + '&allow_lunch=eq.true&select=id,name,age&order=name',
       {}, urlToken
     );
     lunchSession = { profile, dependents: Array.isArray(deps) ? deps : [], token: urlToken };
-    console.log('[chtoken] session créée pour:', profile.full_name, '| role:', profile.role);
+    console.log('[chtoken] ✓ session créée pour:', profile.full_name, '| role:', profile.role);
     resetLunchSessionTimer();
     updateAdminBtn();
     queueRender();
     queueJoin();
-  } catch(e) { console.error('[chtoken] erreur:', e); }
+  } catch(e) { console.error('[chtoken] erreur:', e.message || e); }
 })();
 
 // Mode réseau : charger depuis Supabase
