@@ -971,6 +971,12 @@
             <span id="edit-slot-label" style="font-family:'Space Mono',monospace;font-size:12px;color:var(--accent)"></span>
           </div>
 
+          <!-- Repas préfabriqués -->
+          <div style="margin-bottom:8px;">
+            <div class="admin-field-label" style="margin-bottom:4px;">⚡ Insertion rapide — repas fréquents</div>
+            <div id="preset-meals-grid" style="display:flex;flex-wrap:wrap;gap:4px;"></div>
+          </div>
+
           <!-- Ligne 1 : description + prix -->
           <div style="display:flex;gap:8px;margin-bottom:6px;">
             <div style="flex:1;">
@@ -2561,6 +2567,18 @@ function _restoreMachineToHome() {
     machineEl.style.height  = '';
     machineEl.style.position = '';
     machineEl.style.inset   = '';
+    // Force gantry re-init: dimensions may have been 0 while hidden
+    setTimeout(function() {
+      if(window.G) {
+        var svg = document.getElementById('gantry-svg');
+        if(svg) {
+          var W = svg.clientWidth || 500;
+          var H = svg.clientHeight || 360;
+          window.G.W = W; window.G.H = H;
+          window.G.zMax = (H - 28) - 14;
+        }
+      }
+    }, 80);
   }
 }
 
@@ -2640,6 +2658,55 @@ function buildAllergenGrid(selected) {
 function getCheckedAllergens() {
   return Array.from(document.querySelectorAll('#allergen-grid .allergen-check.checked'))
     .map(function(d){ return d.dataset.allergen; });
+}
+
+// ═══════════════════════════════
+//  REPAS PRÉFABRIQUÉS
+// ═══════════════════════════════
+const PRESET_MEALS = [
+  { emoji:'🍗', label:'Poulet rôti',     desc:'Poulet rôti, légumes grillés, riz basmati',        price:9.50,  allergens:[], cal:520, prot:38, gluc:42, lip:14 },
+  { emoji:'🥩', label:'Bœuf & légumes', desc:'Bœuf braisé, carottes, pommes de terre, jus',       price:11.00, allergens:[], cal:610, prot:41, gluc:35, lip:22 },
+  { emoji:'🐟', label:'Saumon grillé',  desc:'Saumon grillé, quinoa, épinards, citron',           price:12.50, allergens:['Poisson'], cal:490, prot:36, gluc:28, lip:20 },
+  { emoji:'🥗', label:'Bowl végé',      desc:'Bowl légumes rôtis, pois chiches, houmous, taboulé', price:8.50,  allergens:['Sésame'], cal:420, prot:18, gluc:52, lip:12 },
+  { emoji:'🍝', label:'Pasta poulet',   desc:'Pâtes penne, poulet, sauce tomate basilic, parmesan', price:9.00, allergens:['Gluten','Lait'], cal:580, prot:32, gluc:65, lip:16 },
+  { emoji:'🥘', label:'Chili con carne','desc':'Chili con carne, haricots rouges, riz, crème sure', price:8.75, allergens:['Lait'], cal:550, prot:28, gluc:48, lip:18 },
+  { emoji:'🍛', label:'Curry légumes',  desc:'Curry de légumes, lait de coco, riz basmati, naan',  price:8.00,  allergens:['Gluten','Lait'], cal:470, prot:12, gluc:62, lip:16 },
+  { emoji:'🫕', label:'Soupe repas',    desc:'Soupe minestrone épaisse, légumes, vermicelles, pain', price:7.00, allergens:['Gluten'], cal:320, prot:14, gluc:44, lip:8 },
+  { emoji:'🥙', label:'Wrap dinde',     desc:'Wrap blé entier, dinde grillée, avocat, salsa',      price:9.25,  allergens:['Gluten'], cal:490, prot:30, gluc:40, lip:18 },
+  { emoji:'🍱', label:'Bento mixte',    desc:'Riz, edamame, poulet teriyaki, crudités, sauce soya', price:10.50, allergens:['Soya','Gluten'], cal:530, prot:33, gluc:55, lip:14 },
+];
+
+function renderPresetMeals() {
+  var grid = document.getElementById('preset-meals-grid');
+  if(!grid) return;
+  grid.innerHTML = '';
+  PRESET_MEALS.forEach(function(meal) {
+    var btn = document.createElement('button');
+    btn.style.cssText = 'background:var(--surface);border:1px solid var(--border);color:var(--text-dim);font-family:"Barlow Condensed",sans-serif;font-size:11px;font-weight:600;letter-spacing:.04em;padding:3px 8px;cursor:pointer;display:flex;align-items:center;gap:4px;white-space:nowrap;transition:border-color .15s,color .15s;';
+    btn.innerHTML = '<span style="font-size:13px;">' + meal.emoji + '</span><span>' + meal.label + '</span>';
+    btn.onmouseenter = function(){ btn.style.borderColor='var(--accent)'; btn.style.color='var(--accent)'; };
+    btn.onmouseleave = function(){ btn.style.borderColor='var(--border)'; btn.style.color='var(--text-dim)'; };
+    btn.onclick = function() { applyPresetMeal(meal); };
+    grid.appendChild(btn);
+  });
+}
+
+function applyPresetMeal(meal) {
+  var desc = document.getElementById('admin-slot-desc');
+  var price = document.getElementById('admin-slot-price');
+  var cal = document.getElementById('admin-slot-calories');
+  var prot = document.getElementById('admin-slot-proteines');
+  var gluc = document.getElementById('admin-slot-glucides');
+  var lip = document.getElementById('admin-slot-lipides');
+  if(desc)  desc.value  = meal.desc;
+  if(price) price.value = meal.price.toFixed(2);
+  if(cal)   cal.value   = meal.cal;
+  if(prot)  prot.value  = meal.prot;
+  if(gluc)  gluc.value  = meal.gluc;
+  if(lip)   lip.value   = meal.lip;
+  buildAllergenGrid(meal.allergens);
+  // Flash the description field to confirm
+  if(desc) { desc.style.borderColor='var(--accent)'; setTimeout(function(){ desc.style.borderColor=''; },600); }
 }
 
 // ═══════════════════════════════
@@ -2757,6 +2824,7 @@ function selectAdminSlot(id) {
   const slot = state.slots.find(s=>s.id===id);
   document.getElementById('admin-slot-edit').classList.add('active');
   document.getElementById('edit-slot-label').textContent = `Case #${id} — Zone ${slot.zone} (${state.zones[slot.zone]?.name})`;
+  renderPresetMeals();
 
   // Champs existants
   document.getElementById('admin-slot-desc').value    = slot.desc    || '';
