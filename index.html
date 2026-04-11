@@ -947,6 +947,7 @@
     <div class="content">
       <div class="admin-sidebar">
         <div class="admin-nav-item active" onclick="adminNav('cases')" id="nav-cases" data-i18n="navCases">Cases</div>
+        <div class="admin-nav-item" onclick="adminNav('menus')" id="nav-menus">Menus</div>
         <div class="admin-nav-item" onclick="adminNav('temperatures')" id="nav-temperatures" data-i18n="navTemps">Températures</div>
         <div class="admin-nav-item" onclick="adminNav('config')" id="nav-config" data-i18n="navConfig">Configuration</div>
         <div class="admin-nav-item" onclick="adminNav('gantry')" id="nav-gantry">Gantry</div>
@@ -1046,12 +1047,97 @@
           </div>
 
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn accent2" onclick="openMenuPicker()">🍽 Appliquer un menu</button>
             <button class="btn accent" onclick="saveSlotDesc()">💾 Sauvegarder</button>
             <button class="btn" onclick="clearSlotDesc()">Vider la case</button>
             <button class="btn accent3" onclick="cancelReservation()">Annuler réservation</button>
           </div>
         </div>
       </div>
+      <div class="admin-panel" id="panel-menus">
+        <!-- Header -->
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid var(--border);">
+          <div class="admin-section-title" style="margin-bottom:0;padding-bottom:0;border-bottom:none;">Bibliothèque de menus</div>
+          <button class="btn accent" onclick="openMenuForm(null)" style="font-size:11px;padding:5px 12px;">+ Nouveau menu</button>
+        </div>
+        <!-- Liste des menus -->
+        <div id="menu-library-list" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;"></div>
+        <!-- Formulaire création/édition -->
+        <div id="menu-form-wrap" style="display:none;background:var(--bg);border:1px solid var(--border-active);padding:12px;">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin-bottom:10px;" id="menu-form-title">Nouveau menu</div>
+          <!-- Nom + prix -->
+          <div style="display:flex;gap:8px;margin-bottom:6px;">
+            <div style="flex:1;">
+              <div class="admin-field-label">Nom du plat / description</div>
+              <textarea class="admin-field-input" id="mf-desc" rows="2" placeholder="Ex: Poulet rôti, légumes grillés, riz basmati..."></textarea>
+            </div>
+            <div style="width:90px;flex-shrink:0;">
+              <div class="admin-field-label">Prix ($)</div>
+              <input class="admin-field-input" type="number" id="mf-price" min="0" step="0.25" placeholder="0.00" style="width:100%;"/>
+            </div>
+          </div>
+          <!-- Photo + chef + date -->
+          <div style="display:flex;gap:8px;margin-bottom:6px;">
+            <div style="flex:1;">
+              <div class="admin-field-label">Photo (nom de fichier GitHub)</div>
+              <div style="display:flex;gap:5px;align-items:center;">
+                <input class="admin-field-input" type="text" id="mf-photo" placeholder="poulet-roti.jpg" style="flex:1;"/>
+                <button class="btn" onclick="previewMenuPhoto()" style="font-size:11px;padding:4px 8px;flex-shrink:0;">Aperçu</button>
+              </div>
+              <img id="mf-photo-preview" class="admin-photo-preview" src="" alt="" style="display:none;margin-top:4px;"/>
+            </div>
+            <div style="width:130px;flex-shrink:0;display:flex;flex-direction:column;gap:6px;">
+              <div>
+                <div class="admin-field-label">Chef / cuisinier</div>
+                <input class="admin-field-input" type="text" id="mf-chef" placeholder="Prénom Nom" style="width:100%;"/>
+              </div>
+            </div>
+          </div>
+          <!-- Ingrédients -->
+          <div style="margin-bottom:6px;">
+            <div class="admin-field-label">Ingrédients</div>
+            <textarea class="admin-field-input" id="mf-ingredients" rows="2" placeholder="Poulet (200g), huile d'olive, ail, romarin..."></textarea>
+          </div>
+          <!-- Macros -->
+          <div style="margin-bottom:6px;">
+            <div class="admin-field-label">Valeurs nutritives (par portion)</div>
+            <div class="admin-macro-row">
+              <div class="admin-macro-lbl">kcal</div><input type="number" id="mf-calories" min="0" placeholder="0"/>
+              <div class="admin-macro-lbl" style="margin-left:8px;">Prot.</div><input type="number" id="mf-proteines" min="0" placeholder="0"/>
+              <div class="admin-macro-lbl" style="color:var(--text-faint);font-size:9px;">g</div>
+              <div class="admin-macro-lbl" style="margin-left:8px;">Gluc.</div><input type="number" id="mf-glucides" min="0" placeholder="0"/>
+              <div class="admin-macro-lbl" style="color:var(--text-faint);font-size:9px;">g</div>
+              <div class="admin-macro-lbl" style="margin-left:8px;">Lip.</div><input type="number" id="mf-lipides" min="0" placeholder="0"/>
+              <div class="admin-macro-lbl" style="color:var(--text-faint);font-size:9px;">g</div>
+            </div>
+          </div>
+          <!-- Allergènes -->
+          <div style="margin-bottom:10px;">
+            <div class="admin-field-label">Allergènes</div>
+            <div class="allergen-grid" id="mf-allergen-grid"></div>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn accent" onclick="saveMenuForm()">💾 Sauvegarder le menu</button>
+            <button class="btn" onclick="closeMenuForm()">Annuler</button>
+            <button class="btn accent3" id="mf-delete-btn" onclick="deleteCurrentMenu()" style="display:none;margin-left:auto;">Supprimer</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- MODAL PICKER MENU (appliqué à une case) -->
+      <div class="modal-overlay" id="menu-picker-modal">
+        <div class="modal" style="width:420px;max-height:360px;">
+          <div class="modal-header">
+            <div class="modal-title">Choisir un menu</div>
+            <div class="modal-slot-num" id="menu-picker-slot-label"></div>
+          </div>
+          <div class="modal-body" id="menu-picker-body" style="gap:6px;"></div>
+          <div class="modal-footer">
+            <button class="btn" onclick="closeMenuPicker()">Annuler</button>
+          </div>
+        </div>
+      </div>
+
       <div class="admin-panel" id="panel-temperatures">
         <div class="admin-section-title" data-i18n="adminTempsTitle">Températures des sections</div>
         <div id="temp-admin-rows"></div>
@@ -1187,41 +1273,73 @@
     </div>
   </div>
 
-  <!-- NAME MODAL -->
+  <!-- AUTH / ACHAT MODAL — 3 étapes -->
   <div class="modal-overlay" id="name-modal">
-    <div class="modal">
+    <div class="modal" style="width:400px;">
       <div class="modal-header">
-        <div class="modal-title" data-i18n="nameTitle">Votre nom</div>
+        <div class="modal-title" id="auth-modal-title">Connexion</div>
+        <button class="topbar-btn" onclick="closeNameModal()" style="font-size:16px;padding:2px 8px;">✕</button>
       </div>
-      <div class="modal-body">
-        <!-- Purchase summary card -->
-        <div id="purchase-summary" style="background:var(--bg);border:1px solid var(--border-active);border-radius:6px;padding:10px 14px;display:flex;flex-direction:column;gap:6px;margin-bottom:4px;">
-          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
-            <div id="ps-desc" style="font-size:14px;color:var(--text);font-weight:500;line-height:1.35;flex:1;"></div>
-            <div id="ps-price" style="font-family:'Space Mono',monospace;font-size:20px;color:var(--accent);font-weight:700;flex-shrink:0;"></div>
+
+      <!-- Résumé achat — visible à toutes les étapes -->
+      <div id="purchase-summary" style="background:var(--bg);border-bottom:1px solid var(--border);padding:10px 14px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
+        <div id="ps-desc" style="font-size:13px;color:var(--text);font-weight:500;line-height:1.35;flex:1;"></div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex-shrink:0;">
+          <div id="ps-price" style="font-family:'Space Mono',monospace;font-size:18px;color:var(--accent);font-weight:700;"></div>
+          <div id="ps-slot" style="font-family:'Space Mono',monospace;font-size:10px;color:var(--text-faint);"></div>
+        </div>
+      </div>
+
+      <!-- ÉTAPE 1 : LOGIN -->
+      <div id="auth-step-login" class="modal-body" style="display:flex;flex-direction:column;gap:10px;">
+        <div style="font-size:11px;color:var(--text-dim);letter-spacing:.04em;">Connectez-vous avec votre compte CoHabitat pour confirmer l'achat.</div>
+        <!-- Utilisateur déjà connecté -->
+        <div id="auth-session-banner" style="display:none;background:rgba(93,232,140,.08);border:1px solid rgba(93,232,140,.3);padding:8px 10px;font-size:12px;color:var(--success);">
+          ✓ Connecté en tant que <strong id="auth-session-name"></strong>
+          <button onclick="lunchLogout()" style="background:none;border:none;color:var(--text-dim);font-size:11px;cursor:pointer;margin-left:8px;text-decoration:underline;">Changer</button>
+        </div>
+        <div id="auth-login-form" style="display:flex;flex-direction:column;gap:8px;">
+          <div>
+            <div class="admin-field-label">Courriel CoHabitat</div>
+            <input class="admin-field-input" type="email" id="auth-email" placeholder="prenom@exemple.com" autocomplete="email" style="width:100%;font-size:14px;" onkeydown="if(event.key==='Enter')document.getElementById('auth-password').focus()">
           </div>
-          <div style="display:flex;align-items:center;gap:8px;">
-            <div id="ps-slot" style="font-family:'Space Mono',monospace;font-size:10px;color:var(--text-faint);"></div>
+          <div>
+            <div class="admin-field-label">Mot de passe</div>
+            <input class="admin-field-input" type="password" id="auth-password" placeholder="••••••••" style="width:100%;font-size:14px;" onkeydown="if(event.key==='Enter')doLunchLogin()">
+          </div>
+          <div id="auth-login-error" style="font-size:11px;color:var(--accent3);min-height:14px;"></div>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;padding-top:4px;">
+          <button class="btn" onclick="closeNameModal()">Annuler</button>
+          <button class="btn accent" id="auth-login-btn" onclick="doLunchLogin()">Se connecter →</button>
+        </div>
+      </div>
+
+      <!-- ÉTAPE 2 : SÉLECTEUR DE PERSONNE -->
+      <div id="auth-step-select" class="modal-body" style="display:none;flex-direction:column;gap:8px;">
+        <div style="font-size:11px;color:var(--text-dim);letter-spacing:.04em;">Choisissez pour qui est cet achat :</div>
+        <div id="auth-person-list" style="display:flex;flex-direction:column;gap:6px;"></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;padding-top:6px;">
+          <button class="btn" onclick="authBackToLogin()">← Retour</button>
+        </div>
+      </div>
+
+      <!-- ÉTAPE 3 : CONFIRMATION -->
+      <div id="auth-step-confirm" class="modal-body" style="display:none;flex-direction:column;gap:10px;">
+        <div style="background:var(--bg);border:1px solid var(--border);padding:10px 12px;display:flex;align-items:center;gap:10px;">
+          <div style="width:36px;height:36px;border-radius:50%;background:var(--surface2);border:1px solid var(--border-active);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;">👤</div>
+          <div>
+            <div id="confirm-person-name" style="font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:700;letter-spacing:.05em;color:var(--text);"></div>
+            <div id="confirm-person-unit" style="font-size:11px;color:var(--text-dim);"></div>
           </div>
         </div>
-        <div class="confirm-msg" data-i18n="namePrompt">Entrez votre nom pour confirmer l'achat :</div>
-        <input
-          type="text"
-          id="name-input"
-          class="name-text-input"
-          placeholder="Votre nom..."
-          autocomplete="off"
-          autocorrect="off"
-          autocapitalize="words"
-          spellcheck="false"
-          oninput="nameBuffer=this.value"
-          onkeydown="if(event.key==='Enter')confirmReservation()"
-        >
+        <div class="confirm-msg" style="font-size:12px;color:var(--text-dim);">Confirmez l'achat pour cette personne.</div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;">
+          <button class="btn" onclick="authBackToSelect()">← Retour</button>
+          <button class="btn accent" onclick="confirmReservation()" style="font-size:14px;padding:8px 20px;">Confirmer ✓</button>
+        </div>
       </div>
-      <div class="modal-footer">
-        <button class="btn" data-i18n="nameCancelBtn" onclick="closeNameModal()">Annuler</button>
-        <button class="btn accent" data-i18n="nameConfirmBtn" onclick="confirmReservation()">Confirmer ✓</button>
-      </div>
+
     </div>
   </div>
 
@@ -1631,7 +1749,7 @@ function defaultState() {
     orange: { min:26,  max:55  },
     red:    { min:56,  max:100 },
   };
-  return { zones, slots, pin:'1234', colorRanges, boxMax:30, boxCount:30 };
+  return { zones, slots, pin:'1234', colorRanges, boxMax:30, boxCount:30, menus:[] };
 }
 
 // Simulate slow drift of actual temperature toward setpoint
@@ -1838,6 +1956,7 @@ function loadStateLocal() {
       COLOR_BANDS.forEach(b => { if(!parsed.colorRanges[b.key]) parsed.colorRanges[b.key] = def.colorRanges[b.key]; });
       if(parsed.boxMax === undefined) parsed.boxMax = def.boxMax;
       if(parsed.boxCount === undefined) parsed.boxCount = def.boxMax;
+      if(!parsed.menus) parsed.menus = [];
       if(parsed.slots) parsed.slots.forEach(s => {
         if(s.price === undefined) s.price = 0;
         if(s.photo === undefined) s.photo = '';
@@ -2230,6 +2349,217 @@ function closeModal() {
 }
 
 // ═══════════════════════════════
+//  AUTH COHABITAT — MACHINE LUNCH
+// ═══════════════════════════════
+// Supabase CoHabitat (même instance que Modulimo central pour Pointe Est)
+const CH_URL  = SB_URL;
+const CH_ANON = SB_ANON;
+
+// Session en mémoire (pas de localStorage — kiosque partagé)
+let lunchSession = null;   // { profile, dependents, token }
+let lunchSelectedPerson = null; // { name, unit, depId|null }
+const LUNCH_SESSION_TIMEOUT = 5 * 60 * 1000; // 5 min
+let lunchSessionTimer = null;
+
+function resetLunchSessionTimer() {
+  clearTimeout(lunchSessionTimer);
+  lunchSessionTimer = setTimeout(function() {
+    lunchSession = null;
+    lunchSelectedPerson = null;
+  }, LUNCH_SESSION_TIMEOUT);
+}
+
+async function chFetch(path, opts, token) {
+  const res = await fetch(CH_URL + '/rest/v1/' + path, {
+    ...opts,
+    headers: {
+      'apikey': CH_ANON,
+      'Authorization': 'Bearer ' + (token || CH_ANON),
+      'Content-Type': 'application/json',
+      'Prefer': 'return=representation',
+      ...(opts && opts.headers)
+    }
+  });
+  if(!res.ok) { const e = await res.text(); throw new Error(e); }
+  const ct = res.headers.get('content-type') || '';
+  return ct.includes('json') ? res.json() : null;
+}
+
+async function doLunchLogin() {
+  const email = (document.getElementById('auth-email').value || '').trim();
+  const pwd   = (document.getElementById('auth-password').value || '');
+  const errEl = document.getElementById('auth-login-error');
+  const btn   = document.getElementById('auth-login-btn');
+  errEl.textContent = '';
+  if(!email || !pwd) { errEl.textContent = 'Courriel et mot de passe requis.'; return; }
+
+  btn.textContent = '⏳ Connexion…'; btn.disabled = true;
+
+  try {
+    // Auth Supabase CoHabitat
+    const authRes = await fetch(CH_URL + '/auth/v1/token?grant_type=password', {
+      method: 'POST',
+      headers: { 'apikey': CH_ANON, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password: pwd })
+    });
+    const authData = await authRes.json();
+    if(!authRes.ok || !authData.access_token) {
+      throw new Error(authData.error_description || authData.msg || 'Identifiants invalides');
+    }
+    const token = authData.access_token;
+    const userId = authData.user?.id;
+    if(!userId) throw new Error('Utilisateur introuvable');
+
+    // Charger le profil
+    const profiles = await chFetch('profiles?id=eq.' + userId + '&select=id,full_name,unit,role,is_active,resident_plan,resident_plan_until', {}, token);
+    const profile = profiles && profiles[0];
+    if(!profile) throw new Error('Profil introuvable dans CoHabitat');
+
+    // Vérifier compte actif
+    if(profile.is_active === false) {
+      throw new Error('Compte inactif — contactez l\'administrateur');
+    }
+
+    // Vérifier forfait actif (local ou network)
+    const plan = profile.resident_plan;
+    if(!plan || plan === 'none') {
+      throw new Error('Aucun forfait actif — un plan Local ou Network est requis');
+    }
+    if(profile.resident_plan_until && new Date(profile.resident_plan_until) < new Date()) {
+      throw new Error('Forfait expiré — contactez l\'administrateur');
+    }
+
+    // Charger les dépendants avec allow_lunch
+    const deps = await chFetch(
+      'dependents?parent_id=eq.' + userId + '&allow_lunch=eq.true&select=id,name,age&order=name',
+      {}, token
+    );
+
+    lunchSession = { profile, dependents: deps || [], token };
+    resetLunchSessionTimer();
+
+    // Passer à l'étape sélecteur
+    showAuthStep('select');
+    renderPersonSelector();
+
+  } catch(err) {
+    errEl.textContent = '✗ ' + err.message;
+  } finally {
+    btn.textContent = 'Se connecter →'; btn.disabled = false;
+  }
+}
+
+function lunchLogout() {
+  lunchSession = null;
+  lunchSelectedPerson = null;
+  clearTimeout(lunchSessionTimer);
+  showAuthStep('login');
+  updateSessionBanner();
+}
+
+function updateSessionBanner() {
+  const banner = document.getElementById('auth-session-banner');
+  const form   = document.getElementById('auth-login-form');
+  const nameEl = document.getElementById('auth-session-name');
+  if(lunchSession) {
+    banner.style.display = 'block';
+    form.style.display   = 'none';
+    if(nameEl) nameEl.textContent = lunchSession.profile.full_name || '';
+  } else {
+    banner.style.display = 'none';
+    form.style.display   = 'flex';
+  }
+}
+
+function showAuthStep(step) {
+  var steps = ['login','select','confirm'];
+  steps.forEach(function(s) {
+    var el = document.getElementById('auth-step-' + s);
+    if(el) el.style.display = 'none';
+  });
+  var active = document.getElementById('auth-step-' + step);
+  if(active) active.style.display = 'flex';
+  // Titre
+  var titles = { login:'Connexion', select:'Pour qui ?', confirm:'Confirmer l\'achat' };
+  var titleEl = document.getElementById('auth-modal-title');
+  if(titleEl) titleEl.textContent = titles[step] || '';
+}
+
+function renderPersonSelector() {
+  var list = document.getElementById('auth-person-list');
+  if(!list || !lunchSession) return;
+  list.innerHTML = '';
+
+  var persons = [];
+  // Soi-même
+  persons.push({
+    label: lunchSession.profile.full_name || 'Moi',
+    sub:   lunchSession.profile.unit ? 'Unité ' + lunchSession.profile.unit : '',
+    depId: null
+  });
+  // Dépendants
+  (lunchSession.dependents || []).forEach(function(d) {
+    persons.push({
+      label: d.name,
+      sub:   d.age ? d.age + ' ans' : 'Dépendant',
+      depId: d.id
+    });
+  });
+
+  persons.forEach(function(p) {
+    var row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);cursor:pointer;transition:all .15s;background:var(--bg);';
+    row.onmouseenter = function(){ row.style.borderColor='var(--accent)'; row.style.background='rgba(232,197,71,.05)'; };
+    row.onmouseleave = function(){ row.style.borderColor='var(--border)'; row.style.background='var(--bg)'; };
+
+    var icon = document.createElement('div');
+    icon.style.cssText = 'width:34px;height:34px;border-radius:50%;background:var(--surface2);border:1px solid var(--border-active);display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;';
+    icon.textContent = p.depId ? '👦' : '👤';
+
+    var info = document.createElement('div');
+    info.style.cssText = 'flex:1;';
+    info.innerHTML = '<div style="font-family:\'Barlow Condensed\',sans-serif;font-size:15px;font-weight:700;letter-spacing:.04em;color:var(--text);">' + p.label + '</div>'
+      + (p.sub ? '<div style="font-size:11px;color:var(--text-dim);">' + p.sub + '</div>' : '');
+
+    var arrow = document.createElement('div');
+    arrow.style.cssText = 'color:var(--accent);font-size:18px;';
+    arrow.textContent = '›';
+
+    row.appendChild(icon);
+    row.appendChild(info);
+    row.appendChild(arrow);
+
+    row.onclick = function() { selectLunchPerson(p); };
+    list.appendChild(row);
+  });
+}
+
+function selectLunchPerson(p) {
+  lunchSelectedPerson = p;
+  resetLunchSessionTimer();
+  // Afficher confirmation
+  var nameEl = document.getElementById('confirm-person-name');
+  var unitEl = document.getElementById('confirm-person-unit');
+  if(nameEl) nameEl.textContent = p.label;
+  if(unitEl) unitEl.textContent = p.sub || '';
+  showAuthStep('confirm');
+}
+
+function authBackToLogin() {
+  if(lunchSession) {
+    showAuthStep('select');
+    renderPersonSelector();
+  } else {
+    showAuthStep('login');
+    updateSessionBanner();
+  }
+}
+
+function authBackToSelect() {
+  showAuthStep('select');
+}
+
+// ═══════════════════════════════
 //  ACHAT
 // ═══════════════════════════════
 let nameBuffer = '';
@@ -2238,14 +2568,11 @@ function startPurchase(id) {
   closeModal();
   selectedSlotId = id;
   nameBuffer = '';
-  document.querySelector('#name-modal .modal-title').textContent = t('nameTitle');
-  document.querySelector('#name-modal .confirm-msg').textContent = t('namePrompt');
+  lunchSelectedPerson = null;
 
   // Populate purchase summary
   const slot = state.slots.find(s=>s.id===id);
   if(slot) {
-    const zone = state.zones[slot.zone];
-    const color = zoneColor(zone);
     const priceStr = slot.price > 0 ? slot.price.toFixed(2) + ' $' : t('free') || 'Gratuit';
     const el = {
       desc:  document.getElementById('ps-desc'),
@@ -2254,47 +2581,61 @@ function startPurchase(id) {
     };
     if(el.desc)  el.desc.textContent  = slot.desc || '—';
     if(el.price) el.price.textContent = priceStr;
-
     if(el.slot)  el.slot.textContent  = 'Case #' + slot.id;
   }
 
+  // Si session active → aller directement au sélecteur
+  if(lunchSession) {
+    showAuthStep('select');
+    renderPersonSelector();
+    updateSessionBanner();
+  } else {
+    showAuthStep('login');
+    updateSessionBanner();
+    // Reset champs login
+    var emailEl = document.getElementById('auth-email');
+    var pwdEl   = document.getElementById('auth-password');
+    var errEl   = document.getElementById('auth-login-error');
+    if(emailEl) emailEl.value = '';
+    if(pwdEl)   pwdEl.value   = '';
+    if(errEl)   errEl.textContent = '';
+  }
+
   document.getElementById('name-modal').classList.add('active');
-  // Focus the real input — triggers system keyboard on touchscreen
-  setTimeout(() => {
-    const inp = document.getElementById('name-input');
-    if(inp) { inp.value = ''; inp.focus(); }
-  }, 80);
+  // Focus email si pas de session
+  if(!lunchSession) {
+    setTimeout(function() {
+      var inp = document.getElementById('auth-email');
+      if(inp) inp.focus();
+    }, 80);
+  }
 }
 
 function closeNameModal() {
   document.getElementById('name-modal').classList.remove('active');
-  selectedSlotId = null; nameBuffer = '';
-  const inp = document.getElementById('name-input');
-  if(inp) { inp.value = ''; inp.blur(); }
+  selectedSlotId = null;
+  nameBuffer = '';
+  lunchSelectedPerson = null;
 }
 
 function confirmReservation() {
-  const inp = document.getElementById('name-input');
-  if(inp) nameBuffer = inp.value;
-  if(!nameBuffer.trim()) return;
+  if(!lunchSelectedPerson) return;
+  const buyer = lunchSelectedPerson.label;
+  nameBuffer = buyer;
+
   const slot = state.slots.find(s=>s.id===selectedSlotId);
   if(!slot) return;
 
-  // Capture BEFORE clearing
   const zoneName = state.zones[slot.zone].name;
   const zoneId   = slot.zone;
   const slotId   = slot.id;
   const price    = slot.price;
   const slotDesc = slot.desc || '';
-  const buyer    = nameBuffer.trim();
   const priceStr = price > 0 ? price.toFixed(2) + ' $' : 'Gratuit';
   const xFrac    = zoneId === ZONE_IDS[0] ? 0.551 : 0.849;
 
-  // Decrement box count
   if(state.boxCount > 0) state.boxCount--;
-  // Capturer db_id avant de vider le slot
   const slotDbId = slot._db_id;
-  // Clear slot
   slot.desc = '';
   slot.price = 0;
   slot.reserved = false;
@@ -2305,12 +2646,13 @@ function confirmReservation() {
     saveSlotToSupabase(slot);
     saveTransactionToSupabase(slotDbId, buyer, price);
   }
+
+  resetLunchSessionTimer();
   closeNameModal();
   renderGrid();
   renderHomeStats();
   renderMachineSlots();
 
-  // Dispatch to gantry queue (xFrac sera recalculé dynamiquement dans idle)
   window.gantryQueue = window.gantryQueue || [];
   window.gantryQueue.push({ slotId: slotId, xFrac: xFrac, zone: zoneId, desc: slotDesc, price: price });
 
@@ -2326,7 +2668,7 @@ function showSuccess(msg, sub) {
 }
 
 // ═══════════════════════════════
-//  KEYBOARD
+//  KEYBOARD (conservé pour compatibilité)
 // ═══════════════════════════════
 const KEYBOARD_ROWS = [
   ['A','Z','E','R','T','Y','U','I','O','P'],
@@ -2397,6 +2739,7 @@ function adminNav(panel) {
   document.getElementById('nav-'+panel).classList.add('active');
   document.getElementById('panel-'+panel).classList.add('active');
   if(panel==='cases') renderAdminCases();
+  if(panel==='menus') renderMenuLibrary();
   if(panel==='temperatures') renderAdminTemps();
   if(panel==='config') renderAdminConfig();
   if(panel==='status') renderAdminStatus();
@@ -2568,7 +2911,245 @@ function _restoreMachineToHome() {
   }
 }
 
-function renderAdmin() { renderAdminCases(); renderAdminTemps(); renderAdminConfig(); }
+// ═══════════════════════════════
+//  MENUS PRÉ-ÉTABLIS
+// ═══════════════════════════════
+var _editingMenuId = null;
+
+function getMenus() {
+  if(!state.menus) state.menus = [];
+  return state.menus;
+}
+
+function renderMenuLibrary() {
+  const list = document.getElementById('menu-library-list');
+  if(!list) return;
+  const menus = getMenus();
+  list.innerHTML = '';
+  if(!menus.length) {
+    list.innerHTML = '<div style="font-size:12px;color:var(--text-faint);padding:10px 0;">Aucun menu créé. Cliquez sur "+ Nouveau menu" pour commencer.</div>';
+    return;
+  }
+  menus.forEach(function(m) {
+    const card = document.createElement('div');
+    card.style.cssText = 'width:160px;background:var(--surface);border:1px solid var(--border);padding:8px 10px;cursor:pointer;transition:border-color .15s;position:relative;';
+    card.onmouseenter = function(){ card.style.borderColor='var(--accent)'; };
+    card.onmouseleave = function(){ card.style.borderColor='var(--border)'; };
+    const nameEl = document.createElement('div');
+    nameEl.style.cssText = 'font-family:"Barlow Condensed",sans-serif;font-size:12px;font-weight:700;letter-spacing:.05em;color:var(--text);line-height:1.3;margin-bottom:3px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;';
+    nameEl.textContent = m.desc || '(sans nom)';
+    const priceEl = document.createElement('div');
+    priceEl.style.cssText = 'font-family:"Space Mono",monospace;font-size:11px;color:var(--accent);';
+    priceEl.textContent = m.price > 0 ? m.price.toFixed(2) + ' $' : 'Gratuit';
+    const editBtn = document.createElement('button');
+    editBtn.className = 'btn';
+    editBtn.style.cssText = 'font-size:9px;padding:2px 6px;margin-top:5px;';
+    editBtn.textContent = '✎ Modifier';
+    editBtn.onclick = function(e){ e.stopPropagation(); openMenuForm(m.id); };
+    card.appendChild(nameEl);
+    card.appendChild(priceEl);
+    card.appendChild(editBtn);
+    list.appendChild(card);
+  });
+}
+
+function openMenuForm(id) {
+  _editingMenuId = id;
+  const wrap = document.getElementById('menu-form-wrap');
+  const title = document.getElementById('menu-form-title');
+  const delBtn = document.getElementById('mf-delete-btn');
+  if(!wrap) return;
+  wrap.style.display = 'block';
+  if(id === null) {
+    // Nouveau menu — vider le formulaire
+    title.textContent = 'Nouveau menu';
+    if(delBtn) delBtn.style.display = 'none';
+    ['mf-desc','mf-photo','mf-chef','mf-ingredients'].forEach(function(eid){
+      var el = document.getElementById(eid); if(el) el.value='';
+    });
+    ['mf-price','mf-calories','mf-proteines','mf-glucides','mf-lipides'].forEach(function(eid){
+      var el = document.getElementById(eid); if(el) el.value='0';
+    });
+    var prev = document.getElementById('mf-photo-preview');
+    if(prev){ prev.style.display='none'; prev.src=''; }
+    buildMenuAllergenGrid([]);
+  } else {
+    // Éditer un menu existant
+    var m = getMenus().find(function(x){ return x.id===id; });
+    if(!m) return;
+    title.textContent = 'Modifier le menu';
+    if(delBtn) delBtn.style.display = 'inline-block';
+    document.getElementById('mf-desc').value = m.desc || '';
+    document.getElementById('mf-price').value = m.price ?? 0;
+    const rawPhoto = m.photo || '';
+    document.getElementById('mf-photo').value = rawPhoto.startsWith(GITHUB_IMG_BASE) ? rawPhoto.replace(GITHUB_IMG_BASE,'') : rawPhoto;
+    document.getElementById('mf-chef').value = m.chef || '';
+    document.getElementById('mf-ingredients').value = m.ingredients || '';
+    document.getElementById('mf-calories').value = m.calories || '';
+    document.getElementById('mf-proteines').value = m.proteines || '';
+    document.getElementById('mf-glucides').value = m.glucides || '';
+    document.getElementById('mf-lipides').value = m.lipides || '';
+    var prev = document.getElementById('mf-photo-preview');
+    if(m.photo){ prev.src = m.photo; prev.style.display='block'; }
+    else { prev.style.display='none'; prev.src=''; }
+    buildMenuAllergenGrid(m.allergens || []);
+  }
+  wrap.scrollIntoView({ behavior:'smooth', block:'nearest' });
+}
+
+function closeMenuForm() {
+  var wrap = document.getElementById('menu-form-wrap');
+  if(wrap) wrap.style.display = 'none';
+  _editingMenuId = null;
+}
+
+function buildMenuAllergenGrid(selected) {
+  var grid = document.getElementById('mf-allergen-grid');
+  if(!grid) return;
+  grid.innerHTML = '';
+  ALLERGEN_LIST.forEach(function(a) {
+    var checked = (selected||[]).indexOf(a) >= 0;
+    var div = document.createElement('div');
+    div.className = 'allergen-check' + (checked ? ' checked' : '');
+    div.dataset.allergen = a;
+    div.innerHTML = '<span>' + a + '</span>';
+    div.onclick = function() { div.classList.toggle('checked'); };
+    grid.appendChild(div);
+  });
+}
+
+function getMenuAllergens() {
+  return Array.from(document.querySelectorAll('#mf-allergen-grid .allergen-check.checked'))
+    .map(function(d){ return d.dataset.allergen; });
+}
+
+function previewMenuPhoto() {
+  var val = document.getElementById('mf-photo').value.trim();
+  var url = buildPhotoUrl(val);
+  var img = document.getElementById('mf-photo-preview');
+  if(url){ img.src=url; img.style.display='block'; img.onerror=function(){ img.style.display='none'; }; }
+  else { img.style.display='none'; }
+}
+
+function saveMenuForm() {
+  var desc = document.getElementById('mf-desc').value.trim();
+  if(!desc) { alert('Veuillez entrer un nom de plat.'); return; }
+  var menus = getMenus();
+  var menu = {
+    id:          _editingMenuId || ('m_' + Date.now()),
+    desc:        desc,
+    price:       parseFloat(document.getElementById('mf-price').value) || 0,
+    photo:       buildPhotoUrl(document.getElementById('mf-photo').value.trim()),
+    chef:        document.getElementById('mf-chef').value.trim(),
+    ingredients: document.getElementById('mf-ingredients').value.trim(),
+    calories:    parseFloat(document.getElementById('mf-calories').value) || 0,
+    proteines:   parseFloat(document.getElementById('mf-proteines').value) || 0,
+    glucides:    parseFloat(document.getElementById('mf-glucides').value) || 0,
+    lipides:     parseFloat(document.getElementById('mf-lipides').value) || 0,
+    allergens:   getMenuAllergens(),
+  };
+  if(_editingMenuId) {
+    var idx = menus.findIndex(function(m){ return m.id===_editingMenuId; });
+    if(idx >= 0) menus[idx] = menu;
+  } else {
+    menus.push(menu);
+  }
+  state.menus = menus;
+  saveState();
+  closeMenuForm();
+  renderMenuLibrary();
+  flashSave();
+}
+
+function deleteCurrentMenu() {
+  if(!_editingMenuId) return;
+  if(!confirm('Supprimer ce menu de la bibliothèque ?')) return;
+  state.menus = getMenus().filter(function(m){ return m.id !== _editingMenuId; });
+  saveState();
+  closeMenuForm();
+  renderMenuLibrary();
+}
+
+// ─── Picker : appliquer un menu à une case sélectionnée ──────────────────────
+function openMenuPicker() {
+  if(adminSelectedSlot === null) return;
+  var modal = document.getElementById('menu-picker-modal');
+  var body = document.getElementById('menu-picker-body');
+  var label = document.getElementById('menu-picker-slot-label');
+  if(!modal || !body) return;
+  label.textContent = 'Case #' + adminSelectedSlot;
+  var menus = getMenus();
+  body.innerHTML = '';
+  if(!menus.length) {
+    body.innerHTML = '<div style="font-size:12px;color:var(--text-faint);padding:6px 0;">Aucun menu dans la bibliothèque. Créez-en depuis l\'onglet Menus.</div>';
+  } else {
+    menus.forEach(function(m) {
+      var row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:7px 8px;border:1px solid var(--border);cursor:pointer;transition:all .15s;background:var(--bg);';
+      row.onmouseenter = function(){ row.style.borderColor='var(--accent2)'; row.style.background='rgba(79,163,232,.06)'; };
+      row.onmouseleave = function(){ row.style.borderColor='var(--border)'; row.style.background='var(--bg)'; };
+      // Photo miniature
+      if(m.photo) {
+        var img = document.createElement('img');
+        img.src = m.photo;
+        img.style.cssText = 'width:36px;height:36px;object-fit:cover;flex-shrink:0;border:1px solid var(--border);';
+        img.onerror = function(){ img.style.display='none'; };
+        row.appendChild(img);
+      } else {
+        var ph = document.createElement('div');
+        ph.style.cssText = 'width:36px;height:36px;flex-shrink:0;background:var(--surface);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:16px;';
+        ph.textContent = '🍽';
+        row.appendChild(ph);
+      }
+      var info = document.createElement('div');
+      info.style.cssText = 'flex:1;min-width:0;';
+      info.innerHTML = '<div style="font-family:\'Barlow Condensed\',sans-serif;font-size:13px;font-weight:700;letter-spacing:.04em;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (m.desc||'') + '</div>'
+        + '<div style="font-family:\'Space Mono\',monospace;font-size:10px;color:var(--accent);">' + (m.price>0 ? m.price.toFixed(2)+' $' : 'Gratuit') + '</div>';
+      var applyBtn = document.createElement('button');
+      applyBtn.className = 'btn accent2';
+      applyBtn.style.cssText = 'font-size:11px;padding:5px 10px;flex-shrink:0;';
+      applyBtn.textContent = 'Appliquer ›';
+      applyBtn.onclick = function() { applyMenuToSlot(m); };
+      row.appendChild(info);
+      row.appendChild(applyBtn);
+      body.appendChild(row);
+    });
+  }
+  modal.classList.add('active');
+}
+
+function closeMenuPicker() {
+  var modal = document.getElementById('menu-picker-modal');
+  if(modal) modal.classList.remove('active');
+}
+
+function applyMenuToSlot(menu) {
+  if(adminSelectedSlot === null) return;
+  var slot = state.slots.find(function(s){ return s.id===adminSelectedSlot; });
+  if(!slot) return;
+  // Copier toutes les données du menu vers la case
+  slot.desc        = menu.desc;
+  slot.price       = menu.price;
+  slot.photo       = menu.photo;
+  slot.chef        = menu.chef || '';
+  slot.prepDate    = ''; // date sera mise à jour manuellement
+  slot.ingredients = menu.ingredients;
+  slot.calories    = menu.calories;
+  slot.proteines   = menu.proteines;
+  slot.glucides    = menu.glucides;
+  slot.lipides     = menu.lipides;
+  slot.allergens   = (menu.allergens || []).slice();
+  saveState();
+  if(NET_MODE) saveSlotToSupabase(slot);
+  closeMenuPicker();
+  // Rafraîchir le formulaire d'édition pour refléter les nouvelles valeurs
+  selectAdminSlot(adminSelectedSlot);
+  renderMachineSlots();
+  renderHomeStats();
+  flashSave();
+}
+
+function renderAdmin() { renderAdminCases(); renderMenuLibrary(); renderAdminTemps(); renderAdminConfig(); }
 
 function renderAdminCases() {
   const grid = document.getElementById('admin-slots-grid');
