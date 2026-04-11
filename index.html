@@ -3875,27 +3875,26 @@ updateAdminBtn();
 (async function() {
   const urlToken = new URLSearchParams(location.search).get('chtoken');
   if(!urlToken || !NET_MODE) {
-    console.log('[chtoken] absent ou pas NET_MODE. urlToken=', !!urlToken, 'NET_MODE=', NET_MODE);
+    console.log('[chtoken] absent ou pas NET_MODE');
     return;
   }
   console.log('[chtoken] token détecté, longueur:', urlToken.length);
 
   // Nettoyer le token de l'URL immédiatement
-  const cleanUrl = location.pathname + '?machine=' + MACHINE_ID;
-  history.replaceState(null, '', cleanUrl);
+  history.replaceState(null, '', location.pathname + '?machine=' + MACHINE_ID);
 
   try {
-    // Valider le token via l'endpoint auth Supabase
-    const authRes = await fetch(CH_URL + '/auth/v1/user', {
-      headers: { 'apikey': CH_ANON, 'Authorization': 'Bearer ' + urlToken }
-    });
-    console.log('[chtoken] /auth/v1/user status:', authRes.status);
-    if(!authRes.ok) { console.warn('[chtoken] auth échoué'); return; }
-    const authData = await authRes.json();
-    const userId = authData.id;
-    console.log('[chtoken] userId:', userId);
-    if(!userId) { console.warn('[chtoken] pas de userId'); return; }
+    // Décoder le JWT localement (pas besoin de vérifier la signature)
+    const parts = urlToken.split('.');
+    if(parts.length !== 3) { console.warn('[chtoken] JWT invalide'); return; }
+    const payload = JSON.parse(atob(parts[1].replace(/-/g,'+').replace(/_/g,'/')));
+    const userId = payload.sub;
+    const exp    = payload.exp;
+    console.log('[chtoken] userId:', userId, 'exp:', new Date(exp*1000).toISOString());
+    if(!userId) { console.warn('[chtoken] pas de sub dans le JWT'); return; }
+    if(exp && exp < Date.now()/1000) { console.warn('[chtoken] token expiré'); return; }
 
+    // Charger le profil directement avec l'user_id
     const profiles = await chFetch(
       'profiles?id=eq.' + userId + '&select=id,full_name,unit,role,is_active,resident_plan,resident_plan_until',
       {}, urlToken
@@ -3908,12 +3907,13 @@ updateAdminBtn();
     if(!plan || plan === 'none') { console.warn('[chtoken] pas de forfait:', plan); return; }
     if(profile.resident_plan_until && new Date(profile.resident_plan_until) < new Date()) { console.warn('[chtoken] forfait expiré'); return; }
 
+    // Charger les dépendants avec allow_lunch
     const deps = await chFetch(
       'dependents?parent_id=eq.' + userId + '&allow_lunch=eq.true&select=id,name,age&order=name',
       {}, urlToken
     );
     lunchSession = { profile, dependents: Array.isArray(deps) ? deps : [], token: urlToken };
-    console.log('[chtoken] session créée pour:', profile.full_name);
+    console.log('[chtoken] session créée pour:', profile.full_name, '| role:', profile.role);
     resetLunchSessionTimer();
     updateAdminBtn();
     queueRender();
