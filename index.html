@@ -2550,10 +2550,13 @@ async function queueRender() {
 // Bouton "J'ai terminé"
 async function lunchDone() {
   console.log('[lunchDone] _queueEntry:', _queueEntry);
-  await queueLeave();
+  if(_queueEntry) {
+    await queueLeave();
+  }
   lunchSession = null;
   lunchSelectedPerson = null;
   clearTimeout(lunchSessionTimer);
+  queueUnsubscribe();
   updateAdminBtn();
   queueRender();
   showScreen('screen-home');
@@ -2809,6 +2812,11 @@ function authBackToSelect() {
 let nameBuffer = '';
 
 function startPurchase(id) {
+  // Bloquer les transactions en mode démo
+  if(lunchSession && lunchSession.profile.role === 'demo') {
+    showSuccess('Mode démo — transaction désactivée', 'Compte de démonstration');
+    return;
+  }
   closeModal();
   selectedSlotId = id;
   nameBuffer = '';
