@@ -2390,34 +2390,28 @@ const QUEUE_ACTIVE_MINUTES = 10; // durée max d'une session active
 async function queueJoin() {
   if(!NET_MODE || !lunchSession) return;
   const profile = lunchSession.profile;
-  const token   = lunchSession.token;
   const now     = new Date();
-  const expires  = new Date(now.getTime() + QUEUE_ACTIVE_MINUTES * 60000).toISOString();
+  const expires = new Date(now.getTime() + QUEUE_ACTIVE_MINUTES * 60000).toISOString();
 
-  // Vérifier si déjà dans la queue pour cette machine
   try {
-    const existing = await chFetch(
-      'lunch_queue?machine_id=eq.' + MACHINE_ID + '&user_id=eq.' + profile.id + '&select=*',
-      {}, token
+    const existing = await sbFetch(
+      'lunch_queue?machine_id=eq.' + MACHINE_ID + '&user_id=eq.' + profile.id + '&select=*'
     );
     if(existing && existing.length) {
-      // Mettre à jour expires_at
-      await chFetch('lunch_queue?id=eq.' + existing[0].id, {
+      await sbFetch('lunch_queue?id=eq.' + existing[0].id, {
         method: 'PATCH',
         body: JSON.stringify({ expires_at: expires })
-      }, token);
+      });
       _queueEntry = { ...existing[0], expires_at: expires };
     } else {
-      // Lire la queue pour savoir s'il y a un actif
-      const queue = await chFetch(
-        'lunch_queue?machine_id=eq.' + MACHINE_ID + '&order=joined_at&select=*',
-        {}, token
+      const queue = await sbFetch(
+        'lunch_queue?machine_id=eq.' + MACHINE_ID + '&order=joined_at&select=*'
       );
       const active = (queue || []).filter(function(e) {
         return e.status === 'active' && new Date(e.expires_at) > new Date();
       });
       const status = active.length === 0 ? 'active' : 'waiting';
-      const rows = await chFetch('lunch_queue', {
+      const rows = await sbFetch('lunch_queue', {
         method: 'POST',
         body: JSON.stringify({
           machine_id: MACHINE_ID,
@@ -2428,10 +2422,10 @@ async function queueJoin() {
           status:     status,
           expires_at: expires
         })
-      }, token);
+      });
       _queueEntry = rows && rows[0];
     }
-    queueSubscribe(token);
+    queueSubscribe();
     queueRender();
   } catch(err) {
     console.error('queueJoin error:', err);
@@ -2439,65 +2433,54 @@ async function queueJoin() {
 }
 
 async function queueLeave() {
-  if(!_queueEntry || !lunchSession) return;
+  if(!_queueEntry) return;
   try {
-    await chFetch('lunch_queue?id=eq.' + _queueEntry.id, { method: 'DELETE' }, lunchSession.token);
-    // Promouvoir le prochain en attente
-    await queuePromoteNext(lunchSession.token);
+    await sbFetch('lunch_queue?id=eq.' + _queueEntry.id, { method: 'DELETE' });
+    await queuePromoteNext();
   } catch(err) { console.error('queueLeave:', err); }
   _queueEntry = null;
   queueUnsubscribe();
   queueRender();
 }
 
-async function queuePromoteNext(token) {
+async function queuePromoteNext() {
   if(!MACHINE_ID) return;
   try {
-    const waiting = await chFetch(
-      'lunch_queue?machine_id=eq.' + MACHINE_ID + '&status=eq.waiting&order=joined_at&limit=1&select=*',
-      {}, token || CH_ANON
+    const waiting = await sbFetch(
+      'lunch_queue?machine_id=eq.' + MACHINE_ID + '&status=eq.waiting&order=joined_at&limit=1&select=*'
     );
     if(waiting && waiting.length) {
-      const next = waiting[0];
       const expires = new Date(Date.now() + QUEUE_ACTIVE_MINUTES * 60000).toISOString();
-      await chFetch('lunch_queue?id=eq.' + next.id, {
+      await sbFetch('lunch_queue?id=eq.' + waiting[0].id, {
         method: 'PATCH',
         body: JSON.stringify({ status: 'active', expires_at: expires })
-      }, token || CH_ANON);
+      });
     }
   } catch(err) { console.error('queuePromoteNext:', err); }
 }
 
-function queueSubscribe(token) {
+function queueSubscribe() {
   queueUnsubscribe();
   if(!MACHINE_ID) return;
-  // Polling léger toutes les 8s (Realtime nécessiterait le SDK Supabase JS)
-  _queuePollTimer = setInterval(function() { queuePoll(token); }, 8000);
+  _queuePollTimer = setInterval(function() { queuePoll(); }, 8000);
 }
 
 function queueUnsubscribe() {
   if(_queuePollTimer) { clearInterval(_queuePollTimer); _queuePollTimer = null; }
 }
 
-async function queuePoll(token) {
+async function queuePoll() {
   if(!_queueEntry || !NET_MODE) return;
   try {
-    // Nettoyer les entrées expirées
-    const expired = await chFetch(
-      'lunch_queue?machine_id=eq.' + MACHINE_ID + '&expires_at=lt.' + new Date().toISOString() + '&select=id,status',
-      {}, token
+    const expired = await sbFetch(
+      'lunch_queue?machine_id=eq.' + MACHINE_ID + '&expires_at=lt.' + new Date().toISOString() + '&select=id,status'
     );
     for(const e of (expired || [])) {
-      await chFetch('lunch_queue?id=eq.' + e.id, { method: 'DELETE' }, token);
-      if(e.status === 'active') await queuePromoteNext(token);
+      await sbFetch('lunch_queue?id=eq.' + e.id, { method: 'DELETE' });
+      if(e.status === 'active') await queuePromoteNext();
     }
-    // Recharger notre entrée
-    const rows = await chFetch(
-      'lunch_queue?id=eq.' + _queueEntry.id + '&select=*',
-      {}, token
-    );
+    const rows = await sbFetch('lunch_queue?id=eq.' + _queueEntry.id + '&select=*');
     if(!rows || !rows.length) {
-      // Notre entrée a disparu — on a probablement été promu ou supprimé
       _queueEntry = null;
       queueUnsubscribe();
     } else {
@@ -2533,11 +2516,10 @@ async function queueRender() {
   if(badgeGrid) badgeGrid.style.display = 'flex';
 
   // Compter la file (seulement si NET_MODE et queue existe)
-  if(NET_MODE && _queueEntry && lunchSession.token) {
+  if(NET_MODE && _queueEntry) {
     try {
-      var queue = await chFetch(
-        'lunch_queue?machine_id=eq.' + MACHINE_ID + '&order=joined_at&select=id,status,expires_at',
-        {}, lunchSession.token
+      var queue = await sbFetch(
+        'lunch_queue?machine_id=eq.' + MACHINE_ID + '&order=joined_at&select=id,status,expires_at'
       );
       var valid = Array.isArray(queue) ? queue.filter(function(e) {
         return new Date(e.expires_at || 9e15) > new Date();
@@ -3877,62 +3859,54 @@ updateAdminBtn();
 // ─── Auto-login via token passé dans l'URL depuis CoHabitat ──────────────────
 // URL format: ?machine=xxx&chtoken=ACCESS_TOKEN
 (async function() {
-  const params   = new URLSearchParams(location.search);
-  const urlToken = params.get('chtoken');
-  const urlUid   = params.get('chuid');
-  if(!urlToken || !NET_MODE) {
-    console.log('[chtoken] absent ou pas NET_MODE');
+  const params    = new URLSearchParams(location.search);
+  const sessionId = params.get('chsession');
+  if(!sessionId || !NET_MODE) {
+    console.log('[chsession] absent ou pas NET_MODE');
     return;
   }
-  console.log('[chtoken] token détecté, longueur:', urlToken.length, 'uid param:', urlUid);
+  console.log('[chsession] session id détecté:', sessionId);
 
-  // Nettoyer les params sensibles de l'URL immédiatement
+  // Nettoyer l'URL immédiatement
   history.replaceState(null, '', location.pathname + '?machine=' + MACHINE_ID);
 
   try {
-    // Décoder le JWT pour obtenir le user_id (fallback: utiliser chuid de l'URL)
-    let userId = urlUid || null;
+    // Lire la session depuis Modulimo Central (même Supabase que Machine Lunch)
+    const rows = await sbFetch('lunch_sessions?id=eq.' + sessionId + '&select=*');
+    console.log('[chsession] rows:', JSON.stringify(rows));
+    if(!rows || !rows.length) { console.warn('[chsession] session introuvable'); return; }
+    const sess = rows[0];
+
+    // Vérifier expiration
+    if(new Date(sess.expires_at) < new Date()) { console.warn('[chsession] session expirée'); return; }
+
+    // Supprimer la session (usage unique)
+    await sbFetch('lunch_sessions?id=eq.' + sessionId, { method: 'DELETE' });
+
+    // Construire le profil depuis la session
+    const profile = {
+      id:           sess.user_id,
+      full_name:    sess.full_name,
+      unit:         sess.unit,
+      role:         sess.role,
+      is_active:    true,
+      resident_plan: sess.resident_plan
+    };
+
+    // Charger les dépendants depuis CoHabitat si possible, sinon tableau vide
+    let deps = [];
     try {
-      const parts = urlToken.split('.');
-      if(parts.length === 3) {
-        const payload = JSON.parse(atob(parts[1].replace(/-/g,'+').replace(/_/g,'/')));
-        if(payload.sub) userId = payload.sub;
-        const exp = payload.exp;
-        console.log('[chtoken] JWT sub:', userId, 'exp:', new Date((exp||0)*1000).toISOString());
-        if(exp && exp < Date.now()/1000) { console.warn('[chtoken] token expiré'); return; }
-      }
-    } catch(jwtErr) {
-      console.warn('[chtoken] JWT decode error:', jwtErr);
-    }
+      const { SUPABASE_URL: chUrl, SUPABASE_ANON_KEY: chAnon } = window._chConfig || {};
+      // On ne peut pas charger les dépendants cross-Supabase sans token — tableau vide
+    } catch(e) {}
 
-    if(!userId) { console.warn('[chtoken] userId introuvable'); return; }
-
-    // Charger le profil
-    const profiles = await chFetch(
-      'profiles?id=eq.' + userId + '&select=id,full_name,unit,role,is_active,resident_plan,resident_plan_until',
-      {}, urlToken
-    );
-    console.log('[chtoken] profiles result:', JSON.stringify(profiles));
-    const profile = Array.isArray(profiles) && profiles[0];
-    if(!profile) { console.warn('[chtoken] profil introuvable — vérifier RLS profiles'); return; }
-    if(profile.is_active === false) { console.warn('[chtoken] compte inactif'); return; }
-    const plan = profile.resident_plan;
-    if(!plan || plan === 'none') { console.warn('[chtoken] pas de forfait:', plan); return; }
-    if(profile.resident_plan_until && new Date(profile.resident_plan_until) < new Date()) {
-      console.warn('[chtoken] forfait expiré'); return;
-    }
-
-    const deps = await chFetch(
-      'dependents?parent_id=eq.' + userId + '&allow_lunch=eq.true&select=id,name,age&order=name',
-      {}, urlToken
-    );
-    lunchSession = { profile, dependents: Array.isArray(deps) ? deps : [], token: urlToken };
-    console.log('[chtoken] ✓ session créée pour:', profile.full_name, '| role:', profile.role);
+    lunchSession = { profile, dependents: deps, token: null };
+    console.log('[chsession] ✓ session créée pour:', profile.full_name, '| role:', profile.role);
     resetLunchSessionTimer();
     updateAdminBtn();
     queueRender();
     queueJoin();
-  } catch(e) { console.error('[chtoken] erreur:', e.message || e); }
+  } catch(e) { console.error('[chsession] erreur:', e.message || e); }
 })();
 
 // Mode réseau : charger depuis Supabase
