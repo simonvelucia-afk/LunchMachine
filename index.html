@@ -2393,11 +2393,13 @@ async function queueJoin() {
   const profile = lunchSession.profile;
   const now     = new Date();
   const expires = new Date(now.getTime() + QUEUE_ACTIVE_MINUTES * 60000).toISOString();
+  console.log('[queueJoin] user:', profile.full_name, 'machine:', MACHINE_ID);
 
   try {
     const existing = await sbFetch(
       'lunch_queue?machine_id=eq.' + MACHINE_ID + '&user_id=eq.' + profile.id + '&select=*'
     );
+    console.log('[queueJoin] existing:', existing);
     if(existing && existing.length) {
       await sbFetch('lunch_queue?id=eq.' + existing[0].id, {
         method: 'PATCH',
@@ -2412,6 +2414,7 @@ async function queueJoin() {
         return e.status === 'active' && new Date(e.expires_at) > new Date();
       });
       const status = active.length === 0 ? 'active' : 'waiting';
+      console.log('[queueJoin] inserting with status:', status);
       const rows = await sbFetch('lunch_queue', {
         method: 'POST',
         body: JSON.stringify({
@@ -2424,12 +2427,14 @@ async function queueJoin() {
           expires_at: expires
         })
       });
+      console.log('[queueJoin] inserted rows:', rows);
       _queueEntry = rows && rows[0];
     }
+    console.log('[queueJoin] _queueEntry set:', _queueEntry);
     queueSubscribe();
     queueRender();
   } catch(err) {
-    console.error('queueJoin error:', err);
+    console.error('[queueJoin] error:', err.message || err);
   }
 }
 
@@ -2539,12 +2544,13 @@ async function queueRender() {
 }
 // Bouton "J'ai terminé"
 async function lunchDone() {
+  console.log('[lunchDone] _queueEntry:', _queueEntry);
   await queueLeave();
   lunchSession = null;
   lunchSelectedPerson = null;
   clearTimeout(lunchSessionTimer);
   updateAdminBtn();
-  // Retour à l'écran d'accueil
+  queueRender();
   showScreen('screen-home');
 }
 // ═══════════════════════════════
