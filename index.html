@@ -2580,9 +2580,9 @@ async function qFetch(path, opts) {
     }
   });
   if(!res.ok) {
-    const e = await res.text();
-    console.warn('[qFetch] ' + res.status + ' on ' + path + ':', e.substring(0,200));
-    throw new Error(e);
+    const txt = await res.text();
+    console.warn('[qFetch] ' + res.status + ' on ' + path + ':', txt.substring(0,200));
+    throw new Error(txt);
   }
   const ct = res.headers.get('content-type') || '';
   return ct.includes('json') ? res.json() : null;
