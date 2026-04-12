@@ -630,7 +630,8 @@
         <button onclick="lunchDone()" style="background:rgba(93,232,140,.15);border:1px solid rgba(93,232,140,.4);color:var(--success);font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:.06em;padding:1px 6px;cursor:pointer;margin-left:2px;">J'ai terminé ✓</button>
       </div>
       <div id="lunch-queue-badge" style="display:none;font-family:'Space Mono',monospace;font-size:9px;color:var(--accent);border:1px solid rgba(232,197,71,.3);padding:2px 6px;background:rgba(232,197,71,.06);"></div>
-    </div>
+      <div id="lang-switcher" style="display:flex;gap:3px;"><button class="topbar-btn lang-btn" data-lang="fr" onclick="setLang('fr')">🇫🇷 FR</button><button class="topbar-btn lang-btn" data-lang="en" onclick="setLang('en')">🇬🇧 EN</button><button class="topbar-btn lang-btn" data-lang="es" onclick="setLang('es')">🇪🇸 ES</button></div>
+      <button class="topbar-btn" id="btn-admin-home" onclick="goAdmin()">ADMIN</button>
     <div class="content">
       <!-- Machine image side -->
       <div class="home-machine-side" id="machine-interactive">
@@ -2020,12 +2021,13 @@ setInterval(updateClock,1000); updateClock();
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
-  if(id === 'screen-grid') { renderGrid(); }
+  if(id === 'screen-grid') { renderGrid(); queueRender(); }
   if(id === 'screen-admin') renderAdmin();
   if(id === 'screen-home') {
     _restoreMachineToHome();
     renderHomeStats();
     renderMachineSlots();
+    queueRender();
   }
   renderTempStrips();
 }
@@ -2047,12 +2049,12 @@ function goAdmin() {
 //  - mode local (pas de ?machine= dans l'URL), OU
 //  - mode réseau ET l'utilisateur CoHabitat connecté est admin
 function updateAdminBtn() {
-  var isAdmin = lunchSession &&
-    (lunchSession.profile.role === 'admin' || lunchSession.profile.role === 'principal_admin');
-  // Bouton home : toujours visible (PIN protège si pas admin)
+  // Bouton home : TOUJOURS visible (temporaire — PIN protège l'accès)
   var btnHome = document.getElementById('btn-admin-home');
   if(btnHome) btnHome.style.display = '';
-  // Bouton grid : visible seulement si admin connecté
+  // Bouton grid : visible si admin CoHabitat connecté
+  var isAdmin = lunchSession &&
+    (lunchSession.profile.role === 'admin' || lunchSession.profile.role === 'principal_admin');
   var btnGrid = document.getElementById('btn-admin-grid');
   if(btnGrid) btnGrid.style.display = isAdmin ? '' : 'none';
 }
