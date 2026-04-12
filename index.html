@@ -908,6 +908,7 @@
         <span id="lunch-user-name-grid"></span>
         <button onclick="lunchDone()" style="background:rgba(93,232,140,.15);border:1px solid rgba(93,232,140,.4);color:var(--success);font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:.06em;padding:1px 6px;cursor:pointer;margin-left:2px;">J'ai terminé ✓</button>
       </div>
+      <button class="topbar-btn" id="btn-admin-grid" onclick="goAdmin()" style="display:none;">ADMIN</button>
       <button class="topbar-btn" data-i18n="back" onclick="showScreen('screen-home')">← Retour</button>
     </div>
     <div class="temp-strip" id="temp-strip-grid"></div>
@@ -2046,10 +2047,14 @@ function goAdmin() {
 //  - mode local (pas de ?machine= dans l'URL), OU
 //  - mode réseau ET l'utilisateur CoHabitat connecté est admin
 function updateAdminBtn() {
-  var btn = document.getElementById('btn-admin-home');
-  if(!btn) return;
-  // Toujours visible — le PIN ou la session CoHabitat admin protège l'accès
-  btn.style.display = '';
+  var isAdmin = lunchSession &&
+    (lunchSession.profile.role === 'admin' || lunchSession.profile.role === 'principal_admin');
+  // Bouton home : toujours visible (PIN protège si pas admin)
+  var btnHome = document.getElementById('btn-admin-home');
+  if(btnHome) btnHome.style.display = '';
+  // Bouton grid : visible seulement si admin connecté
+  var btnGrid = document.getElementById('btn-admin-grid');
+  if(btnGrid) btnGrid.style.display = isAdmin ? '' : 'none';
 }
 
 // ═══════════════════════════════
@@ -2396,18 +2401,18 @@ async function queueJoin() {
   console.log('[queueJoin] user:', profile.full_name, 'machine:', MACHINE_ID);
 
   try {
-    const existing = await sbFetch(
+    const existing = await qFetch(
       'lunch_queue?machine_id=eq.' + MACHINE_ID + '&user_id=eq.' + profile.id + '&select=*'
     );
     console.log('[queueJoin] existing:', existing);
     if(existing && existing.length) {
-      await sbFetch('lunch_queue?id=eq.' + existing[0].id, {
+      await qFetch('lunch_queue?id=eq.' + existing[0].id, {
         method: 'PATCH',
         body: JSON.stringify({ expires_at: expires })
       });
       _queueEntry = { ...existing[0], expires_at: expires };
     } else {
-      const queue = await sbFetch(
+      const queue = await qFetch(
         'lunch_queue?machine_id=eq.' + MACHINE_ID + '&order=joined_at&select=*'
       );
       const active = (queue || []).filter(function(e) {
@@ -2415,7 +2420,7 @@ async function queueJoin() {
       });
       const status = active.length === 0 ? 'active' : 'waiting';
       console.log('[queueJoin] inserting with status:', status);
-      const rows = await sbFetch('lunch_queue', {
+      const rows = await qFetch('lunch_queue', {
         method: 'POST',
         body: JSON.stringify({
           machine_id: MACHINE_ID,
@@ -2441,7 +2446,7 @@ async function queueJoin() {
 async function queueLeave() {
   if(!_queueEntry) return;
   try {
-    await sbFetch('lunch_queue?id=eq.' + _queueEntry.id, { method: 'DELETE' });
+    await qFetch('lunch_queue?id=eq.' + _queueEntry.id, { method: 'DELETE' });
     await queuePromoteNext();
   } catch(err) { console.error('queueLeave:', err); }
   _queueEntry = null;
@@ -2452,12 +2457,12 @@ async function queueLeave() {
 async function queuePromoteNext() {
   if(!MACHINE_ID) return;
   try {
-    const waiting = await sbFetch(
+    const waiting = await qFetch(
       'lunch_queue?machine_id=eq.' + MACHINE_ID + '&status=eq.waiting&order=joined_at&limit=1&select=*'
     );
     if(waiting && waiting.length) {
       const expires = new Date(Date.now() + QUEUE_ACTIVE_MINUTES * 60000).toISOString();
-      await sbFetch('lunch_queue?id=eq.' + waiting[0].id, {
+      await qFetch('lunch_queue?id=eq.' + waiting[0].id, {
         method: 'PATCH',
         body: JSON.stringify({ status: 'active', expires_at: expires })
       });
@@ -2478,14 +2483,14 @@ function queueUnsubscribe() {
 async function queuePoll() {
   if(!_queueEntry || !NET_MODE) return;
   try {
-    const expired = await sbFetch(
+    const expired = await qFetch(
       'lunch_queue?machine_id=eq.' + MACHINE_ID + '&expires_at=lt.' + new Date().toISOString() + '&select=id,status'
     );
     for(const e of (expired || [])) {
-      await sbFetch('lunch_queue?id=eq.' + e.id, { method: 'DELETE' });
+      await qFetch('lunch_queue?id=eq.' + e.id, { method: 'DELETE' });
       if(e.status === 'active') await queuePromoteNext();
     }
-    const rows = await sbFetch('lunch_queue?id=eq.' + _queueEntry.id + '&select=*');
+    const rows = await qFetch('lunch_queue?id=eq.' + _queueEntry.id + '&select=*');
     if(!rows || !rows.length) {
       _queueEntry = null;
       queueUnsubscribe();
@@ -2524,7 +2529,7 @@ async function queueRender() {
   // Compter la file (seulement si NET_MODE et queue existe)
   if(NET_MODE && _queueEntry) {
     try {
-      var queue = await sbFetch(
+      var queue = await qFetch(
         'lunch_queue?machine_id=eq.' + MACHINE_ID + '&order=joined_at&select=id,status,expires_at'
       );
       var valid = Array.isArray(queue) ? queue.filter(function(e) {
@@ -2557,6 +2562,31 @@ async function lunchDone() {
 // Supabase CoHabitat (même instance que Modulimo central pour Pointe Est)
 const CH_URL  = SB_URL;
 const CH_ANON = SB_ANON;
+
+// Supabase CoHabitat — pour lunch_queue et lunch_sessions
+const COHAB_URL  = 'https://uwyhrdjlwetcbtskijrs.supabase.co';
+const COHAB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV3eWhyZGpsd2V0Y2J0c2tpanJzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1NzMxNjYsImV4cCI6MjA4ODE0OTE2Nn0.NHo_RY4DjTmtkFcjOJ3dFPzNRN1rCwBCDXyIixOSrn4';
+
+// Fetch vers CoHabitat Supabase (lunch_queue, lunch_sessions)
+async function qFetch(path, opts) {
+  const res = await fetch(COHAB_URL + '/rest/v1/' + path, {
+    ...opts,
+    headers: {
+      'apikey': COHAB_ANON,
+      'Authorization': 'Bearer ' + COHAB_ANON,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=representation',
+      ...(opts && opts.headers)
+    }
+  });
+  if(!res.ok) {
+    const e = await res.text();
+    console.warn('[qFetch] ' + res.status + ' on ' + path + ':', e.substring(0,200));
+    throw new Error(e);
+  }
+  const ct = res.headers.get('content-type') || '';
+  return ct.includes('json') ? res.json() : null;
+}
 
 // Session en mémoire (pas de localStorage — kiosque partagé)
 let lunchSession = null;   // { profile, dependents, token }
@@ -3879,7 +3909,7 @@ updateAdminBtn();
 
   try {
     // Lire la session depuis Modulimo Central (même Supabase que Machine Lunch)
-    const rows = await sbFetch('lunch_sessions?id=eq.' + sessionId + '&select=*');
+    const rows = await qFetch('lunch_sessions?id=eq.' + sessionId + '&select=*');
     console.log('[chsession] rows:', JSON.stringify(rows));
     if(!rows || !rows.length) { console.warn('[chsession] session introuvable'); return; }
     const sess = rows[0];
@@ -3888,7 +3918,7 @@ updateAdminBtn();
     if(new Date(sess.expires_at) < new Date()) { console.warn('[chsession] session expirée'); return; }
 
     // Supprimer la session (usage unique)
-    await sbFetch('lunch_sessions?id=eq.' + sessionId, { method: 'DELETE' });
+    await qFetch('lunch_sessions?id=eq.' + sessionId, { method: 'DELETE' });
 
     // Construire le profil depuis la session
     const profile = {
