@@ -31,10 +31,12 @@
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none; touch-action:manipulation; -webkit-touch-callout:none; }
   input, textarea, [contenteditable] { user-select:text !important; -webkit-user-select:text !important; cursor:text; touch-action:auto; }
 
-  html, body {
-    width:800px; height:480px; overflow:hidden;
+  html { background:var(--bg); display:flex; align-items:center; justify-content:center; min-height:100vh; min-width:100vw; }
+  body {
+    width:800px; height:480px; overflow:hidden; flex-shrink:0;
     background:var(--bg); color:var(--text);
     font-family:'Barlow', sans-serif; font-size:14px; cursor:default;
+    box-shadow:0 0 40px rgba(0,0,0,.8);
   }
 
   #app { width:800px; height:480px; position:relative; overflow:hidden; }
@@ -632,6 +634,7 @@
       <div id="lunch-queue-badge" style="display:none;font-family:'Space Mono',monospace;font-size:9px;color:var(--accent);border:1px solid rgba(232,197,71,.3);padding:2px 6px;background:rgba(232,197,71,.06);"></div>
       <div id="lang-switcher" style="display:flex;gap:3px;"><button class="topbar-btn lang-btn" data-lang="fr" onclick="setLang('fr')">🇫🇷 FR</button><button class="topbar-btn lang-btn" data-lang="en" onclick="setLang('en')">🇬🇧 EN</button><button class="topbar-btn lang-btn" data-lang="es" onclick="setLang('es')">🇪🇸 ES</button></div>
       <button class="topbar-btn" id="btn-admin-home" onclick="goAdmin()">ADMIN</button>
+    </div>
     <div class="content">
       <!-- Machine image side -->
       <div class="home-machine-side" id="machine-interactive">
