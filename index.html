@@ -2011,12 +2011,22 @@ async function rpcLunchPurchase({ userId, depId, slotDbId, buyerName, price }) {
 }
 
 // Conserve pour les slots gratuits (price === 0) : simple trace, pas de debit.
+// lunch_transactions vit desormais sur CoHabitat (meme instance que profiles).
 async function saveFreeTransactionToSupabase(slotDbId, buyerName) {
   if(!NET_MODE) return;
   try {
-    await sbFetch('lunch_transactions', {
+    const userId = lunchSession?.profile?.id || null;
+    const depId  = lunchSelectedPerson?.depId || null;
+    await chFetch('lunch_transactions', {
       method: 'POST',
-      body: JSON.stringify({ machine_id: MACHINE_ID, slot_id: slotDbId, buyer_name: buyerName, price: 0 })
+      body: JSON.stringify({
+        machine_id: MACHINE_ID,
+        slot_id:    slotDbId,
+        buyer_name: buyerName || '',
+        price:      0,
+        user_id:    userId,
+        dep_id:     depId
+      })
     });
   } catch(err) { console.error('saveFreeTransaction error:', err); }
 }
@@ -2688,13 +2698,19 @@ function showDoneOverlay() {
   document.body.appendChild(el);
 }
 // ═══════════════════════════════
-// Supabase CoHabitat (même instance que Modulimo central pour Pointe Est)
-const CH_URL  = SB_URL;
-const CH_ANON = SB_ANON;
-
-// Supabase CoHabitat — pour lunch_queue et lunch_sessions
+// Deux bases Supabase :
+//   - SB_URL (central)   : lunch_machines, lunch_zones, lunch_slots, lunch_menus
+//   - COHAB_URL (immeuble): profiles, dependents, lunch_queue, lunch_sessions,
+//                           lunch_transactions, RPC lunch_purchase.
+// CH_URL pointe vers l'immeuble car c'est la que vivent les soldes et le
+// ledger financier. Precedemment pointait vers le central par erreur, ce qui
+// faisait que lunch_purchase ne trouvait pas les profils et que les soldes
+// n'etaient jamais debites.
 const COHAB_URL  = 'https://uwyhrdjlwetcbtskijrs.supabase.co';
 const COHAB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV3eWhyZGpsd2V0Y2J0c2tpanJzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1NzMxNjYsImV4cCI6MjA4ODE0OTE2Nn0.NHo_RY4DjTmtkFcjOJ3dFPzNRN1rCwBCDXyIixOSrn4';
+
+const CH_URL  = COHAB_URL;
+const CH_ANON = COHAB_ANON;
 
 // Fetch vers CoHabitat Supabase (lunch_queue, lunch_sessions)
 async function qFetch(path, opts) {
