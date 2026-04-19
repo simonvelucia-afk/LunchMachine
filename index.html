@@ -2025,7 +2025,10 @@ async function rpcLunchPurchase({ userId, depId, slotDbId, buyerName, price }) {
       p_user_id:   userId,
       p_dep_id:    depId || null,
       p_machine_id: MACHINE_ID,
-      p_slot_db_id: slotDbId,
+      // p_slot_db_id est typee TEXT cote SQL pour s'adapter a tout type
+      // d'ID de lunch_slots (UUID, INT, TEXT). On force String() ici pour
+      // que PostgREST recoive bien une chaine et pas un nombre.
+      p_slot_db_id: slotDbId == null ? null : String(slotDbId),
       p_buyer_name: buyerName || '',
       p_amount:    Number(price) || 0
     })
