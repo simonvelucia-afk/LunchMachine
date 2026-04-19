@@ -4498,6 +4498,33 @@ updateAdminBtn();
   } catch(e) { console.error('[chsession] erreur:', e.message || e); }
 })();
 
+// Cleanup au unload : si l'usager ferme l'onglet sans cliquer "J'ai termine",
+// on libere la file (DELETE sur lunch_queue) et on notifie l'opener pour qu'il
+// rafraichisse la carte machine. fetch(keepalive) garantit que la requete
+// part meme apres unload, contrairement a un fetch normal qui serait abandonne.
+function _kioskCleanupOnUnload() {
+  try {
+    if(_queueEntry && _queueEntry.id) {
+      fetch(COHAB_URL + '/rest/v1/lunch_queue?id=eq.' + encodeURIComponent(_queueEntry.id), {
+        method: 'DELETE',
+        keepalive: true,
+        headers: {
+          'apikey': COHAB_ANON,
+          'Authorization': 'Bearer ' + COHAB_ANON,
+          'Content-Type': 'application/json'
+        }
+      });
+    }
+    if(window.opener && !window.opener.closed) {
+      window.opener.postMessage({ type: 'lunch-done', machineId: MACHINE_ID }, '*');
+    }
+  } catch(e) {}
+}
+window.addEventListener('beforeunload', _kioskCleanupOnUnload);
+// pagehide complete beforeunload sur les navigateurs mobiles / Safari ou
+// beforeunload est parfois ignore.
+window.addEventListener('pagehide', _kioskCleanupOnUnload);
+
 // Mode réseau : charger depuis Supabase
 if(NET_MODE) {
   showNetBadge('⏳ CONNEXION…', '#4fa3e8');
