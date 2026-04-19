@@ -982,8 +982,14 @@
         <div class="admin-nav-item" onclick="adminNav('status')" id="nav-status" data-i18n="navStatus">Statuts</div>
       </div>
       <div class="admin-panel active" id="panel-cases">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid var(--border);">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:8px;">
           <div class="admin-section-title" style="margin-bottom:0;padding-bottom:0;border-bottom:none;">Gestion des cases</div>
+          <div id="multi-select-ui" style="display:flex;align-items:center;gap:6px;">
+            <button class="btn" id="multi-select-btn" onclick="toggleMultiSelect()" style="font-size:11px;padding:5px 10px;">☐ Sélection multiple</button>
+            <span id="multi-select-count" style="font-family:'Space Mono',monospace;font-size:10px;color:var(--accent);display:none;">0 cases</span>
+            <button class="btn accent2" id="multi-apply-btn" onclick="openMultiMenuPicker()" style="font-size:11px;padding:5px 10px;display:none;">➤ Appliquer menu</button>
+            <button class="btn" id="multi-clear-btn" onclick="clearMultiSelect()" style="font-size:11px;padding:5px 10px;display:none;">✕</button>
+          </div>
           <div id="clear-all-ui" style="display:flex;align-items:center;gap:6px;">
             <button class="btn accent3" id="clear-all-btn" onclick="clearAllConfirm()" style="font-size:11px;padding:5px 12px;">⚠ Vider toutes les cases</button>
             <div id="clear-all-confirm" style="display:none;align-items:center;gap:6px;">
@@ -1175,6 +1181,13 @@
         <div class="admin-section-title">Configuration des sections</div>
         <div id="config-section-rows"></div>
         <button class="btn accent admin-save-btn" onclick="saveConfig()">Appliquer & Reconfigurer</button>
+        <div style="margin-top:12px;" class="admin-section-title">Robot (mode automatique)</div>
+        <div class="admin-row">
+          <div class="admin-label">Vitesse auto</div>
+          <input type="range" id="gantry-auto-speed" min="1" max="10" step="1" value="5" style="width:180px;accent-color:var(--accent);" oninput="updateAutoSpeed(this.value)">
+          <span id="gantry-auto-speed-val" class="admin-unit" style="font-family:'Space Mono',monospace;color:var(--accent);min-width:18px;text-align:right;">5</span>
+        </div>
+        <div style="font-size:10px;color:var(--text-faint);margin:-4px 0 12px 140px;">1 = lent et doux · 5 = equilibre · 10 = rapide et nerveux</div>
         <div style="margin-top:12px;" class="admin-section-title">Boîtes réutilisables</div>
         <div class="admin-row">
           <div class="admin-label">Maximum de boîtes</div>
@@ -1817,7 +1830,7 @@ function defaultState() {
     orange: { min:26,  max:55  },
     red:    { min:56,  max:100 },
   };
-  return { zones, slots, pin:'1234', colorRanges, boxMax:30, boxCount:30, menus:[] };
+  return { zones, slots, pin:'1234', colorRanges, boxMax:30, boxCount:30, menus:[], gantryAutoSpeed:5 };
 }
 
 // Simulate slow drift of actual temperature toward setpoint
@@ -2254,6 +2267,7 @@ function renderMachineSlots() {
     visible.forEach(function(slot) {
       var has = !!slot.desc;
       var div = document.createElement('div');
+      div.dataset.slotId = slot.id; // pour alignement vertical du gantry
       // flex:none — la case prend sa hauteur naturelle, le conteneur scroll si nécessaire
       div.style.cssText = 'flex:none;border:1px solid ' + (has ? color+'66' : '#1a1a2a') + ';background:' + (has ? color+'14' : 'rgba(0,0,0,0.2)') + ';padding:4px 5px;display:flex;flex-direction:column;gap:2px;cursor:' + (has ? 'pointer' : 'default') + ';border-radius:2px;';
       var top = document.createElement('div');
@@ -3148,6 +3162,11 @@ function checkPin() {
 //  ADMIN
 // ═══════════════════════════════
 let adminSelectedSlot = null;
+// Multi-select : si actif, chaque clic sur une case l'ajoute/retire du set
+// plutot que d'ouvrir l'edition. Permet d'appliquer un menu a plusieurs cases
+// en une operation (utile pour le remplissage physique).
+let adminMultiSelectMode = false;
+let adminMultiSelectedSlots = new Set();
 
 function adminNav(panel) {
   document.querySelectorAll('.admin-nav-item').forEach(el=>el.classList.remove('active'));
@@ -3198,6 +3217,17 @@ function updateManualSpeed(v) {
   _manualSpeed = parseInt(v);
   var el = document.getElementById('gantry-speed-val');
   if(el) el.textContent = v;
+}
+
+// Regle la vitesse du robot en mode AUTO (utilise par la machine d'etat du gantry).
+// La valeur est persistee dans state.gantryAutoSpeed et relue sur chaque frame
+// pour ajuster la raideur du spring.
+function updateAutoSpeed(v) {
+  var n = Math.max(1, Math.min(10, parseInt(v) || 5));
+  state.gantryAutoSpeed = n;
+  saveState();
+  var el = document.getElementById('gantry-auto-speed-val');
+  if(el) el.textContent = n;
 }
 
 function startManualMove(dir) {
@@ -3607,23 +3637,134 @@ function applyMenuToSlot(menu) {
   if(adminSelectedSlot === null) return;
   var slot = state.slots.find(function(s){ return s.id===adminSelectedSlot; });
   if(!slot) return;
-  // Copier toutes les données du menu vers la case
+  copyMenuIntoSlot(menu, slot);
+  saveState();
+  if(NET_MODE) saveSlotToSupabase(slot);
+  closeMenuPicker();
+  // Rafraîchir le formulaire d'édition pour refléter les nouvelles valeurs
+  selectAdminSlot(adminSelectedSlot);
+  renderMachineSlots();
+  renderHomeStats();
+  flashSave();
+}
+
+// Copie toutes les proprietes d'un menu dans un slot (sauf prepDate : reste
+// manuel). Partage entre applyMenuToSlot (1 case) et applyMenuToMultiSlots (N).
+function copyMenuIntoSlot(menu, slot) {
   slot.desc        = menu.desc;
   slot.price       = menu.price;
   slot.photo       = menu.photo;
   slot.chef        = menu.chef || '';
-  slot.prepDate    = ''; // date sera mise à jour manuellement
+  slot.prepDate    = '';
   slot.ingredients = menu.ingredients;
   slot.calories    = menu.calories;
   slot.proteines   = menu.proteines;
   slot.glucides    = menu.glucides;
   slot.lipides     = menu.lipides;
   slot.allergens   = (menu.allergens || []).slice();
+}
+
+// ─── Multi-select : remplissage rapide de plusieurs cases ────────────────────
+function toggleMultiSelect() {
+  adminMultiSelectMode = !adminMultiSelectMode;
+  adminMultiSelectedSlots.clear();
+  updateMultiSelectUI();
+  renderAdminCases();
+  // Ferme le formulaire d'edition qui ne sert pas en multi
+  if(adminMultiSelectMode) {
+    var editBox = document.getElementById('admin-slot-edit');
+    if(editBox) editBox.classList.remove('active');
+    adminSelectedSlot = null;
+  }
+}
+
+function toggleMultiSlot(slotId) {
+  if(adminMultiSelectedSlots.has(slotId)) adminMultiSelectedSlots.delete(slotId);
+  else adminMultiSelectedSlots.add(slotId);
+  updateMultiSelectUI();
+  renderAdminCases();
+}
+
+function clearMultiSelect() {
+  adminMultiSelectedSlots.clear();
+  updateMultiSelectUI();
+  renderAdminCases();
+}
+
+function updateMultiSelectUI() {
+  var btn   = document.getElementById('multi-select-btn');
+  var count = document.getElementById('multi-select-count');
+  var apply = document.getElementById('multi-apply-btn');
+  var clr   = document.getElementById('multi-clear-btn');
+  if(btn) {
+    btn.textContent = adminMultiSelectMode ? '☑ Sélection multiple' : '☐ Sélection multiple';
+    btn.className = 'btn' + (adminMultiSelectMode ? ' accent2' : '');
+    btn.style.fontSize = '11px';
+    btn.style.padding  = '5px 10px';
+  }
+  var n = adminMultiSelectedSlots.size;
+  var show = adminMultiSelectMode;
+  if(count) { count.style.display = show ? '' : 'none'; count.textContent = n + ' case' + (n>1?'s':''); }
+  if(apply) { apply.style.display = show && n > 0 ? '' : 'none'; }
+  if(clr)   { clr.style.display   = show && n > 0 ? '' : 'none'; }
+}
+
+function openMultiMenuPicker() {
+  if(!adminMultiSelectMode || adminMultiSelectedSlots.size === 0) return;
+  var modal = document.getElementById('menu-picker-modal');
+  var body  = document.getElementById('menu-picker-body');
+  var label = document.getElementById('menu-picker-slot-label');
+  if(!modal || !body) return;
+  label.textContent = adminMultiSelectedSlots.size + ' cases sélectionnées';
+  var menus = getMenus();
+  body.innerHTML = '';
+  if(!menus.length) {
+    body.innerHTML = '<div style="font-size:12px;color:var(--text-faint);padding:6px 0;">Aucun menu dans la bibliothèque. Créez-en depuis l\'onglet Menus.</div>';
+  } else {
+    menus.forEach(function(m) {
+      var row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:7px 8px;border:1px solid var(--border);cursor:pointer;transition:all .15s;background:var(--bg);';
+      row.onmouseenter = function(){ row.style.borderColor='var(--accent2)'; row.style.background='rgba(79,163,232,.06)'; };
+      row.onmouseleave = function(){ row.style.borderColor='var(--border)'; row.style.background='var(--bg)'; };
+      var ph = document.createElement('div');
+      if(m.photo) {
+        ph = document.createElement('img'); ph.src = m.photo;
+        ph.style.cssText = 'width:36px;height:36px;object-fit:cover;flex-shrink:0;border:1px solid var(--border);';
+        ph.onerror = function(){ ph.style.display='none'; };
+      } else {
+        ph.style.cssText = 'width:36px;height:36px;flex-shrink:0;background:var(--surface);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:16px;';
+        ph.textContent = '🍽';
+      }
+      var info = document.createElement('div');
+      info.style.cssText = 'flex:1;min-width:0;';
+      info.innerHTML = '<div style="font-family:\'Barlow Condensed\',sans-serif;font-size:13px;font-weight:700;letter-spacing:.04em;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (m.desc||'') + '</div>'
+        + '<div style="font-family:\'Space Mono\',monospace;font-size:10px;color:var(--accent);">' + (m.price>0 ? m.price.toFixed(2)+' $' : 'Gratuit') + '</div>';
+      var applyBtn = document.createElement('button');
+      applyBtn.className = 'btn accent2';
+      applyBtn.style.cssText = 'font-size:11px;padding:5px 10px;flex-shrink:0;';
+      applyBtn.textContent = 'Appliquer aux ' + adminMultiSelectedSlots.size + ' ›';
+      applyBtn.onclick = function() { applyMenuToMultiSlots(m); };
+      row.appendChild(ph);
+      row.appendChild(info);
+      row.appendChild(applyBtn);
+      body.appendChild(row);
+    });
+  }
+  modal.classList.add('active');
+}
+
+function applyMenuToMultiSlots(menu) {
+  if(!adminMultiSelectMode || adminMultiSelectedSlots.size === 0) return;
+  var ids = Array.from(adminMultiSelectedSlots);
+  ids.forEach(function(id) {
+    var slot = state.slots.find(function(s){ return s.id === id; });
+    if(!slot) return;
+    copyMenuIntoSlot(menu, slot);
+    if(NET_MODE) saveSlotToSupabase(slot);
+  });
   saveState();
-  if(NET_MODE) saveSlotToSupabase(slot);
   closeMenuPicker();
-  // Rafraîchir le formulaire d'édition pour refléter les nouvelles valeurs
-  selectAdminSlot(adminSelectedSlot);
+  clearMultiSelect(); // vide la selection apres application
   renderMachineSlots();
   renderHomeStats();
   flashSave();
@@ -3663,7 +3804,10 @@ function renderAdminCases() {
     row.style.cssText = 'display:flex;flex-wrap:wrap;gap:5px;margin-bottom:4px;';
     zoneSlots.forEach(function(slot) {
       const div = document.createElement('div');
-      div.className = 'admin-slot' + (adminSelectedSlot === slot.id ? ' selected' : '');
+      const isMulti = adminMultiSelectMode && adminMultiSelectedSlots.has(slot.id);
+      const isSingle = !adminMultiSelectMode && adminSelectedSlot === slot.id;
+      div.className = 'admin-slot' + (isSingle || isMulti ? ' selected' : '');
+      if(isMulti) div.style.outline = '2px solid var(--accent2)';
       const status = slot.desc ? 'OK' : 'Vide';
       const statusColor = slot.desc ? 'var(--success)' : 'var(--text-faint)';
       const bar = document.createElement('div');
@@ -3678,7 +3822,10 @@ function renderAdminCases() {
       div.appendChild(numEl);
       div.appendChild(stEl);
       div.appendChild(bar);
-      div.onclick = function() { selectAdminSlot(slot.id); };
+      div.onclick = function() {
+        if(adminMultiSelectMode) toggleMultiSlot(slot.id);
+        else selectAdminSlot(slot.id);
+      };
       row.appendChild(div);
     });
     grid.appendChild(row);
@@ -4039,6 +4186,12 @@ function renderAdminConfig() {
     const bc = document.getElementById('box-count-input');
     if(bm) bm.value = state.boxMax;
     if(bc) bc.value = state.boxCount;
+    // Vitesse auto du gantry
+    const gs  = document.getElementById('gantry-auto-speed');
+    const gsv = document.getElementById('gantry-auto-speed-val');
+    const v   = (typeof state.gantryAutoSpeed === 'number') ? state.gantryAutoSpeed : 5;
+    if(gs)  gs.value = v;
+    if(gsv) gsv.textContent = v;
     // Token GitHub
     const ti = document.getElementById('github-token-input');
     if(ti) { const t = getGitHubToken(); ti.value = t ? t.substring(0,8)+'…' : ''; }
@@ -4201,26 +4354,57 @@ window.gantryWaitingPickup = false;
   if(!window.gantryQueue) window.gantryQueue = [];
   window.gantryWaitingPickup = window.gantryWaitingPickup || false;
 
-  // Mesure les vraies positions X des colonnes en pixels relatifs au SVG
+  // PAD doit matcher la valeur utilisee dans updateGantry() (cx = PAD + G.x*(W-PAD*2)).
+  // Sinon la fraction calculee ici pointe plus a gauche ou droite que la cible reelle.
+  var GANTRY_PAD = 8;
+
+  // Mesure les vraies positions X des colonnes en fractions compensees par PAD.
+  // Retourne G.x tel que PAD + G.x*(W-PAD*2) = centre DOM de la colonne.
   function getColXFracs() {
     var svg = document.getElementById('gantry-svg');
     if(!svg) return { pickup: 0.20, Z1: 0.55, Z2: 0.82 };
     var svgRect = svg.getBoundingClientRect();
-    if(!svgRect.width) return { pickup: 0.20, Z1: 0.55, Z2: 0.82 };
+    var travelW = svgRect.width - GANTRY_PAD * 2;
+    if(travelW <= 0) return { pickup: 0.20, Z1: 0.55, Z2: 0.82 };
     function fracOf(el) {
       if(!el) return null;
       var r = el.getBoundingClientRect();
-      return (r.left + r.width / 2 - svgRect.left) / svgRect.width;
+      var px = r.left + r.width / 2 - svgRect.left - GANTRY_PAD;
+      return px / travelW;
     }
     var f1 = fracOf(document.getElementById('pickup-col-empty'));
     var f2 = fracOf(document.getElementById('zone1-slots'));
     var f3 = fracOf(document.getElementById('zone2-slots'));
     return {
-      pickup: f1 !== null ? Math.max(0.04, Math.min(0.95, f1)) : 0.20,
-      Z1:     f2 !== null ? Math.max(0.04, Math.min(0.95, f2)) : 0.55,
-      Z2:     f3 !== null ? Math.max(0.04, Math.min(0.95, f3)) : 0.82,
+      pickup: f1 !== null ? Math.max(0, Math.min(1, f1)) : 0.20,
+      Z1:     f2 !== null ? Math.max(0, Math.min(1, f2)) : 0.55,
+      Z2:     f3 !== null ? Math.max(0, Math.min(1, f3)) : 0.82,
     };
   }
+
+  // Mesure la position Z (verticale, en pixels dans l'espace de travel) du centre
+  // d'un slot precis, pour que le robot pointe sur la bonne rangee et pas au
+  // milieu de la colonne. Retourne null si le DOM n'est pas pret.
+  function getSlotZ(zoneKey, slotId) {
+    var svg = document.getElementById('gantry-svg');
+    if(!svg) return null;
+    var containerId = zoneKey === 'A' ? 'zone1-slots' : 'zone2-slots';
+    var container = document.getElementById(containerId);
+    if(!container) return null;
+    var el = container.querySelector('[data-slot-id="' + slotId + '"]');
+    if(!el) return null;
+    var svgRect = svg.getBoundingClientRect();
+    if(!svgRect.height) return null;
+    var r = el.getBoundingClientRect();
+    var RAIL_H = 5, RUNNER_H = 7;
+    var travelTop = 0 + RUNNER_H; // TOP_Y + RUNNER_H
+    // Centre du slot en pixels, ramene dans l'espace de travel du rail Y
+    var yPx = r.top + r.height / 2 - svgRect.top - travelTop;
+    // Borne [0, zMax]
+    var zMax = svgRect.height - RAIL_H - RUNNER_H - travelTop - 28;
+    return Math.max(0, Math.min(zMax, yPx));
+  }
+  window._getSlotZ = getSlotZ;
 
   var COL_X = { pickup: 0.20, Z1: 0.55, Z2: 0.82 };
   window._gantryRecalcCols = function() { COL_X = getColXFracs(); };
@@ -4440,10 +4624,18 @@ window.gantryWaitingPickup = false;
       return;
     }
 
-    // ── Spring normal — stiffness suffisante pour voir le mouvement ────
-    var sx = springStep(G.x, G.targetX, G.vx, 0.18, 0.78);
+    // ── Spring normal — stiffness module par le reglage "Vitesse auto" ──
+    // state.gantryAutoSpeed : 1..10 (defaut 5). Mappe a une stiffness
+    // plausible [0.06 .. 0.30] et un damping legerement plus ferme quand
+    // on accelere pour eviter l'overshoot.
+    var _auto = (state && typeof state.gantryAutoSpeed === 'number') ? state.gantryAutoSpeed : 5;
+    _auto = Math.max(1, Math.min(10, _auto));
+    var _stiffX = 0.06 + (_auto - 1) * (0.30 - 0.06) / 9;
+    var _stiffZ = _stiffX * 0.9;
+    var _damp   = 0.82 - (_auto - 5) * 0.008; // 0.85..0.78
+    var sx = springStep(G.x, G.targetX, G.vx, _stiffX, _damp);
     G.vx = sx.v; G.x = sx.p;
-    var sz = springStep(G.z, G.targetZ, G.vz, 0.16, 0.79);
+    var sz = springStep(G.z, G.targetZ, G.vz, _stiffZ, _damp);
     G.vz = sz.v; G.z = sz.p;
     var cx = PAD + G.x*(W-PAD*2);
     var cy = TRAVEL_TOP + G.z + RUNNER_H;
@@ -4531,6 +4723,9 @@ window.gantryWaitingPickup = false;
         G.currentJob = window.gantryQueue.shift();
         // Calculer xFrac depuis la zone du job (le slot est déjà vidé dans state)
         G.currentJob.xFrac = (G.currentJob.zone === 'A') ? COL_X.Z1 : COL_X.Z2;
+        // Mesurer la position verticale reelle du slot (fallback : zSlot median)
+        var slotZ = getSlotZ(G.currentJob.zone, G.currentJob.slotId);
+        G.currentJob.zTarget = (slotZ !== null) ? slotZ : zSlot;
         G.phase = 'toSlot';
         G.timer = 60;
       } else if(G.timer <= 0) {
@@ -4540,8 +4735,8 @@ window.gantryWaitingPickup = false;
     // ── TOSLOT : aller chercher le plateau dans la tablette ───────────────
     } else if(G.phase==='toSlot') {
       G.targetX = G.currentJob.xFrac;
-      G.targetZ = zSlot;
-      if(nearX(G.x, G.currentJob.xFrac) && nearZ(G.z, zSlot)) {
+      G.targetZ = G.currentJob.zTarget;
+      if(nearX(G.x, G.currentJob.xFrac) && nearZ(G.z, G.currentJob.zTarget)) {
         G.carrying = true;
         spawnSparks(cx, cy);
         G.phase = 'grabPause';
@@ -4551,7 +4746,7 @@ window.gantryWaitingPickup = false;
     // ── GRABPAUSE : pause de saisie avant départ vers cueillette ─────────
     } else if(G.phase==='grabPause') {
       G.targetX = G.currentJob.xFrac;
-      G.targetZ = zSlot;
+      G.targetZ = G.currentJob.zTarget;
       if(G.timer <= 0) {
         G.phase = 'toPickup';
       }
@@ -4612,8 +4807,9 @@ window.gantryWaitingPickup = false;
     // ── RETURNMOVE : ramener le plateau dans son casier ───────────────────
     } else if(G.phase==='returnMove') {
       if(G.currentJob) G.targetX = G.currentJob.xFrac;
-      G.targetZ = zSlot;
-      if(G.currentJob && nearX(G.x, G.currentJob.xFrac) && nearZ(G.z, zSlot)) {
+      var zBack = (G.currentJob && typeof G.currentJob.zTarget === 'number') ? G.currentJob.zTarget : zSlot;
+      G.targetZ = zBack;
+      if(G.currentJob && nearX(G.x, G.currentJob.xFrac) && nearZ(G.z, zBack)) {
         G.carrying = false;
         soundPickupDrop();
         G.phase = 'returnDrop';
