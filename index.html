@@ -2046,26 +2046,32 @@ async function fetchUserBalance(userId, depId) {
     console.log('[fetchUserBalance] skip:', { NET_MODE: NET_MODE, userId: userId });
     return null;
   }
+  // On passe par la RPC SECURITY DEFINER plutot que de tenter un SELECT
+  // direct sur profiles/dependents : la cle anon n'a pas le droit de lire
+  // virtual_balance via RLS, et on ne veut pas ouvrir cette table a anon.
+  // La RPC est definie dans CoHabitat/sql/001_lunch_coherence.sql (section D).
   try {
-    var path = depId
-      ? 'dependents?id=eq.' + encodeURIComponent(depId) + '&select=virtual_balance'
-      : 'profiles?id=eq.' + encodeURIComponent(userId) + '&select=virtual_balance';
-    var rows = await qFetch(path);
-    // Diagnostic explicite : 0 ligne avec anon key signifie typiquement une
-    // policy RLS qui filtre out la ligne. Sans token authentifie, "user_id =
-    // auth.uid()" est faux, donc la SELECT retourne []. On le log clairement
-    // pour qu'on n'ait pas a deviner.
-    if(!rows || !rows.length) {
-      console.warn('[fetchUserBalance] 0 ligne pour', depId ? 'dependents.id='+depId : 'profiles.id='+userId,
-        '— probable RLS qui filtre (anon ne voit pas la ligne) OU id absent de la table.');
+    var res = await fetch(CH_URL + '/rest/v1/rpc/lunch_get_balance', {
+      method: 'POST',
+      headers: {
+        'apikey': CH_ANON,
+        'Authorization': 'Bearer ' + CH_ANON,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ p_user_id: userId, p_dep_id: depId || null })
+    });
+    if(!res.ok) {
+      var txt = await res.text();
+      console.warn('[fetchUserBalance] RPC ' + res.status + ':', txt.substring(0,200));
       return null;
     }
-    var v = parseFloat(rows[0].virtual_balance);
-    if(isNaN(v)) {
-      console.warn('[fetchUserBalance] virtual_balance non numerique:', rows[0].virtual_balance);
+    var v = await res.json();
+    if(v === null || v === undefined) {
+      console.warn('[fetchUserBalance] RPC a renvoye null pour', depId ? 'dep='+depId : 'user='+userId);
       return null;
     }
-    return v;
+    var n = parseFloat(v);
+    return isNaN(n) ? null : n;
   } catch(err) {
     console.warn('[fetchUserBalance] erreur reseau:', err.message || err);
     return null;
