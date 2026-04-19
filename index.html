@@ -2,9 +2,12 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=800, initial-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="HandheldFriendly" content="true">
 <meta name="MobileOptimized" content="800">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Machine Lunch</title>
 <link rel="icon" type="image/png" href="https://raw.githubusercontent.com/simonvelucia-afk/modulimo-home/main/images/favicon_Modulimo.png">
 <style>
@@ -31,12 +34,21 @@
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none; touch-action:manipulation; -webkit-touch-callout:none; }
   input, textarea, [contenteditable] { user-select:text !important; -webkit-user-select:text !important; cursor:text; touch-action:auto; }
 
-  html { background:var(--bg); display:flex; align-items:center; justify-content:center; min-height:100vh; min-width:100vw; }
+  html {
+    background:var(--bg);
+    display:flex; align-items:center; justify-content:center;
+    width:100%; height:100%;
+    min-height:100vh; min-width:100vw;
+    overflow:hidden;
+    --app-scale: 1;
+  }
   body {
     width:800px; height:480px; overflow:hidden; flex-shrink:0;
     background:var(--bg); color:var(--text);
     font-family:'Barlow', sans-serif; font-size:14px; cursor:default;
     box-shadow:0 0 40px rgba(0,0,0,.8);
+    transform: scale(var(--app-scale));
+    transform-origin: center center;
   }
 
   #app { width:800px; height:480px; position:relative; overflow:hidden; }
@@ -1429,6 +1441,23 @@
 
 </div>
 <script>
+// ═══════════════════════════════
+//  FULLSCREEN SCALING
+//  Designed for 800x480 (Pi touchscreen).
+//  On larger viewports (PC/mobile) we scale to fit while keeping aspect ratio.
+//  Scale = 1 on a native 800x480 display, so the Pi kiosk is unchanged.
+// ═══════════════════════════════
+(function fitToViewport(){
+  const BASE_W = 800, BASE_H = 480;
+  const apply = () => {
+    const s = Math.min(window.innerWidth / BASE_W, window.innerHeight / BASE_H);
+    document.documentElement.style.setProperty('--app-scale', s);
+  };
+  apply();
+  window.addEventListener('resize', apply);
+  window.addEventListener('orientationchange', apply);
+})();
+
 // ═══════════════════════════════
 //  STATE
 // ═══════════════════════════════
