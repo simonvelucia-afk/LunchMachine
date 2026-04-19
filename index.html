@@ -1921,6 +1921,7 @@ async function loadFromSupabase() {
 
     showNetBadge('🟢 RÉSEAU', '#5de88c');
     renderAll();
+    loadMenusFromSupabase(); // non-bloquant : menus partages entre kiosques
   } catch(err) {
     console.error('Supabase load error:', err);
     showNetBadge('🔴 HORS-LIGNE', '#e85047');
@@ -1979,14 +1980,45 @@ async function saveZoneToSupabase(zoneKey) {
   } catch(err) { console.error('saveZone error:', err); }
 }
 
-async function saveTransactionToSupabase(slotDbId, buyerName, price) {
+// Appelle la RPC atomique lunch_purchase : verifie le solde, insere la tx, debite.
+// p_user_id  : uuid du resident (toujours celui qui est loggue)
+// p_dep_id   : uuid du dependant si l'achat est fait pour lui (sinon null)
+// p_slot_db_id : uuid de la ligne lunch_slots (slot._db_id)
+// Retourne l'uuid de la tx creee, ou throw en cas d'echec (solde insuffisant, etc).
+async function rpcLunchPurchase({ userId, depId, slotDbId, buyerName, price }) {
+  if(!NET_MODE) throw new Error('Hors-ligne');
+  const res = await fetch(CH_URL + '/rest/v1/rpc/lunch_purchase', {
+    method: 'POST',
+    headers: {
+      'apikey': CH_ANON,
+      'Authorization': 'Bearer ' + CH_ANON,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      p_user_id:   userId,
+      p_dep_id:    depId || null,
+      p_machine_id: MACHINE_ID,
+      p_slot_db_id: slotDbId,
+      p_buyer_name: buyerName || '',
+      p_amount:    Number(price) || 0
+    })
+  });
+  if(!res.ok) {
+    const txt = await res.text();
+    throw new Error(txt || ('RPC ' + res.status));
+  }
+  return await res.json();
+}
+
+// Conserve pour les slots gratuits (price === 0) : simple trace, pas de debit.
+async function saveFreeTransactionToSupabase(slotDbId, buyerName) {
   if(!NET_MODE) return;
   try {
     await sbFetch('lunch_transactions', {
       method: 'POST',
-      body: JSON.stringify({ machine_id: MACHINE_ID, slot_id: slotDbId, buyer_name: buyerName, price: price })
+      body: JSON.stringify({ machine_id: MACHINE_ID, slot_id: slotDbId, buyer_name: buyerName, price: 0 })
     });
-  } catch(err) { console.error('saveTransaction error:', err); }
+  } catch(err) { console.error('saveFreeTransaction error:', err); }
 }
 
 // Badge mode réseau dans la topbar
@@ -2621,6 +2653,39 @@ async function lunchDone() {
   queueRender();
   showScreen('screen-home');
   applyLogoBg(null);
+  notifyOpenerAndClose();
+}
+
+// Notifie CoHabitat (window.opener) pour forcer un refresh immediat des cartes
+// machine, puis tente de fermer l'onglet. Si le navigateur bloque window.close()
+// (cas kiosque Pi en plein ecran, ou onglet ouvert directement), on affiche un
+// overlay "Vous pouvez fermer cet onglet" pour que l'usager n'ait rien a faire.
+function notifyOpenerAndClose() {
+  try {
+    if(window.opener && !window.opener.closed) {
+      window.opener.postMessage({ type: 'lunch-done', machineId: MACHINE_ID }, '*');
+    }
+  } catch(e) {}
+  // On laisse un court delai pour que le message parte avant la fermeture
+  setTimeout(function() {
+    // Tentative de fermeture (fonctionne si ouvert via window.open depuis CoHabitat)
+    window.close();
+    // Fallback : si on est toujours la apres 300ms, afficher l'overlay
+    setTimeout(function() {
+      if(!document.hidden) showDoneOverlay();
+    }, 300);
+  }, 150);
+}
+
+function showDoneOverlay() {
+  if(document.getElementById('done-overlay')) return;
+  const el = document.createElement('div');
+  el.id = 'done-overlay';
+  el.style.cssText = 'position:fixed;inset:0;background:#0e0e0e;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:99999;color:#f0f0f0;font-family:"Barlow Condensed",sans-serif;padding:24px;text-align:center;';
+  el.innerHTML = '<div style="font-size:60px;color:#5de88c;margin-bottom:14px;">✓</div>'
+    + '<div style="font-size:22px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px;">Session terminée</div>'
+    + '<div style="font-size:14px;color:#888;max-width:320px;line-height:1.5;">Vous pouvez fermer cet onglet. Votre session a été libérée.</div>';
+  document.body.appendChild(el);
 }
 // ═══════════════════════════════
 // Supabase CoHabitat (même instance que Modulimo central pour Pointe Est)
@@ -2934,7 +2999,7 @@ function closeNameModal() {
   lunchSelectedPerson = null;
 }
 
-function confirmReservation() {
+async function confirmReservation() {
   if(!lunchSelectedPerson) return;
   const buyer = lunchSelectedPerson.label;
   nameBuffer = buyer;
@@ -2949,9 +3014,28 @@ function confirmReservation() {
   const slotDesc = slot.desc || '';
   const priceStr = price > 0 ? price.toFixed(2) + ' $' : 'Gratuit';
   const xFrac    = zoneId === ZONE_IDS[0] ? 0.551 : 0.849;
+  const slotDbId = slot._db_id;
+
+  // En mode reseau avec prix > 0 : debit atomique via RPC (verifie solde + insere tx).
+  // Si l'appel echoue (solde insuffisant, etc.), on abandonne sans consommer le slot.
+  if(NET_MODE && price > 0 && lunchSession?.profile?.id) {
+    try {
+      await rpcLunchPurchase({
+        userId:   lunchSession.profile.id,
+        depId:    lunchSelectedPerson.depId,
+        slotDbId: slotDbId,
+        buyerName: buyer,
+        price:    price
+      });
+    } catch(err) {
+      const msg = (err && err.message) ? err.message : String(err);
+      const friendly = /insuffisant/i.test(msg) ? 'Solde insuffisant' : 'Achat refuse : ' + msg.substring(0,80);
+      showSuccess('✗ ' + friendly, '#' + slotId + ' — ' + zoneName);
+      return;
+    }
+  }
 
   if(state.boxCount > 0) state.boxCount--;
-  const slotDbId = slot._db_id;
   slot.desc = '';
   slot.price = 0;
   slot.reserved = false;
@@ -2960,7 +3044,7 @@ function confirmReservation() {
   saveState();
   if(NET_MODE) {
     saveSlotToSupabase(slot);
-    saveTransactionToSupabase(slotDbId, buyer, price);
+    if(price === 0) saveFreeTransactionToSupabase(slotDbId, buyer);
   }
 
   resetLunchSessionTimer();
@@ -3372,6 +3456,7 @@ function saveMenuForm() {
   }
   state.menus = menus;
   saveState();
+  saveMenuToSupabase(menu); // sync partage entre kiosques/apps
   closeMenuForm();
   renderMenuLibrary();
   flashSave();
@@ -3380,10 +3465,73 @@ function saveMenuForm() {
 function deleteCurrentMenu() {
   if(!_editingMenuId) return;
   if(!confirm('Supprimer ce menu de la bibliothèque ?')) return;
-  state.menus = getMenus().filter(function(m){ return m.id !== _editingMenuId; });
+  const idToDelete = _editingMenuId;
+  state.menus = getMenus().filter(function(m){ return m.id !== idToDelete; });
   saveState();
+  deleteMenuFromSupabase(idToDelete); // sync partage
   closeMenuForm();
   renderMenuLibrary();
+}
+
+// ─── Sync des menus (lunch_menus) avec Supabase ──────────────────────────────
+async function saveMenuToSupabase(menu) {
+  if(!NET_MODE) return;
+  const body = {
+    id:          menu.id,
+    machine_id:  MACHINE_ID,
+    description: menu.desc || '',
+    price:       menu.price || 0,
+    photo:       menu.photo || null,
+    chef:        menu.chef || null,
+    ingredients: menu.ingredients || null,
+    allergens:   menu.allergens || [],
+    calories:    menu.calories || null,
+    proteines:   menu.proteines || null,
+    glucides:    menu.glucides || null,
+    lipides:     menu.lipides || null,
+    active:      true,
+    updated_at:  new Date().toISOString()
+  };
+  try {
+    // UPSERT via Prefer: resolution=merge-duplicates (ou on_conflict sur id)
+    await sbFetch('lunch_menus?on_conflict=id', {
+      method: 'POST',
+      headers: { 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify(body)
+    });
+  } catch(err) { console.error('saveMenuToSupabase error:', err); }
+}
+
+async function deleteMenuFromSupabase(menuId) {
+  if(!NET_MODE) return;
+  try {
+    await sbFetch('lunch_menus?id=eq.' + encodeURIComponent(menuId), { method: 'DELETE' });
+  } catch(err) { console.error('deleteMenuFromSupabase error:', err); }
+}
+
+async function loadMenusFromSupabase() {
+  if(!NET_MODE || !MACHINE_ID) return;
+  try {
+    const rows = await sbFetch('lunch_menus?machine_id=eq.' + MACHINE_ID + '&active=eq.true&select=*&order=updated_at.desc');
+    if(!Array.isArray(rows)) return;
+    state.menus = rows.map(function(r) {
+      return {
+        id:          r.id,
+        desc:        r.description || '',
+        price:       parseFloat(r.price) || 0,
+        photo:       r.photo || '',
+        chef:        r.chef || '',
+        ingredients: r.ingredients || '',
+        allergens:   r.allergens || [],
+        calories:    r.calories || 0,
+        proteines:   r.proteines || 0,
+        glucides:    r.glucides || 0,
+        lipides:     r.lipides || 0
+      };
+    });
+    saveState(); // cache localStorage pour usage offline
+    renderMenuLibrary();
+  } catch(err) { console.error('loadMenusFromSupabase error:', err); }
 }
 
 // ─── Picker : appliquer un menu à une case sélectionnée ──────────────────────
