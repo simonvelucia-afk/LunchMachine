@@ -2042,17 +2042,32 @@ async function rpcLunchPurchase({ userId, depId, slotDbId, buyerName, price }) {
 // Retourne null si offline, profile manquant, ou erreur reseau (l'UI doit
 // alors afficher "—" pour rester sobre plutot que "0$" qui serait trompeur).
 async function fetchUserBalance(userId, depId) {
-  if(!NET_MODE || !userId) return null;
+  if(!NET_MODE || !userId) {
+    console.log('[fetchUserBalance] skip:', { NET_MODE: NET_MODE, userId: userId });
+    return null;
+  }
   try {
     var path = depId
       ? 'dependents?id=eq.' + encodeURIComponent(depId) + '&select=virtual_balance'
       : 'profiles?id=eq.' + encodeURIComponent(userId) + '&select=virtual_balance';
     var rows = await qFetch(path);
-    if(!rows || !rows.length) return null;
+    // Diagnostic explicite : 0 ligne avec anon key signifie typiquement une
+    // policy RLS qui filtre out la ligne. Sans token authentifie, "user_id =
+    // auth.uid()" est faux, donc la SELECT retourne []. On le log clairement
+    // pour qu'on n'ait pas a deviner.
+    if(!rows || !rows.length) {
+      console.warn('[fetchUserBalance] 0 ligne pour', depId ? 'dependents.id='+depId : 'profiles.id='+userId,
+        '— probable RLS qui filtre (anon ne voit pas la ligne) OU id absent de la table.');
+      return null;
+    }
     var v = parseFloat(rows[0].virtual_balance);
-    return isNaN(v) ? null : v;
+    if(isNaN(v)) {
+      console.warn('[fetchUserBalance] virtual_balance non numerique:', rows[0].virtual_balance);
+      return null;
+    }
+    return v;
   } catch(err) {
-    console.warn('[fetchUserBalance]', err.message || err);
+    console.warn('[fetchUserBalance] erreur reseau:', err.message || err);
     return null;
   }
 }
@@ -3170,14 +3185,19 @@ async function confirmReservation() {
       console.log('[lunch_purchase] tx id =', rpcResult, '| user=', lunchSession.profile.id, 'dep=', lunchSelectedPerson.depId, 'amount=', price);
     } catch(err) {
       const msg = (err && err.message) ? err.message : String(err);
+      // On reste tres restrictif sur la classification "RPC manquante" : seul
+      // le code PGRST202 ou la phrase explicite "Could not find the function"
+      // doivent declencher ce message. "does not exist" tout court est trop
+      // general (peut viser une colonne, un schema, une autre RPC) et nous
+      // a deja induit en erreur en pointant vers une migration deja deployee.
       var friendly;
-      if(/insuffisant/i.test(msg))                     friendly = 'Solde insuffisant';
-      else if(/could not find.*function|does not exist|PGRST202/i.test(msg))
-        friendly = 'RPC lunch_purchase manquante — migration SQL non deployee';
-      else if(/profil introuvable/i.test(msg))         friendly = 'Profil resident introuvable sur CoHabitat';
-      else if(/dependant introuvable/i.test(msg))      friendly = 'Dependant introuvable';
-      else                                             friendly = 'Achat refuse : ' + msg.substring(0,80);
-      console.error('[rpcLunchPurchase]', msg);
+      if(/insuffisant/i.test(msg))                                friendly = 'Solde insuffisant';
+      else if(/PGRST202|could not find the function/i.test(msg))  friendly = 'RPC lunch_purchase manquante — migration SQL non deployee';
+      else if(/profil introuvable/i.test(msg))                    friendly = 'Profil resident introuvable sur CoHabitat';
+      else if(/dependant introuvable/i.test(msg))                 friendly = 'Dependant introuvable';
+      else                                                        friendly = 'Achat refuse : ' + msg.substring(0,200);
+      console.error('[rpcLunchPurchase] echec:', msg);
+      console.error('[rpcLunchPurchase] params:', { user: lunchSession.profile.id, dep: lunchSelectedPerson.depId, slot: slotDbId, machine: MACHINE_ID, amount: price });
       showSuccess('✗ ' + friendly, '#' + slotId + ' — ' + zoneName);
       return;
     }
