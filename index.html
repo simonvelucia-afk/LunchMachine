@@ -1922,9 +1922,12 @@ async function loadFromSupabase() {
       zones:       Object.keys(zoneMap).length ? zoneMap : def.zones,
       slots:       slotArr.length ? slotArr : def.slots,
       pin:         machine.pin || '1234',
-      colorRanges: def.colorRanges,
-      boxMax:      def.boxMax,
-      boxCount:    def.boxCount,
+      // Reglages persistes sur lunch_machines (migration 005) avec fallback
+      // sur les defauts locaux si les colonnes n'existent pas encore.
+      colorRanges: machine.color_ranges || def.colorRanges,
+      boxMax:      (typeof machine.box_max === 'number') ? machine.box_max : def.boxMax,
+      boxCount:    (typeof machine.box_count === 'number') ? machine.box_count : def.boxCount,
+      gantryAutoSpeed: (typeof machine.gantry_auto_speed === 'number') ? machine.gantry_auto_speed : 5,
       machineName: machine.name
     };
 
@@ -2021,6 +2024,22 @@ async function rpcLunchPurchase({ userId, depId, slotDbId, buyerName, price }) {
     throw new Error(txt || ('RPC ' + res.status));
   }
   return await res.json();
+}
+
+// Sauvegarde les reglages de la machine (box_max, box_count, vitesse auto,
+// color_ranges) sur la ligne lunch_machines. Appele depuis les formulaires
+// admin ; non-bloquant en mode offline ou si les colonnes n'existent pas
+// encore (migration 005). Sauvegarde aussi localement via saveState().
+async function saveMachineSettingsToSupabase(patch) {
+  if(!NET_MODE || !MACHINE_ID) return;
+  try {
+    await sbFetch('lunch_machines?id=eq.' + encodeURIComponent(MACHINE_ID), {
+      method: 'PATCH',
+      body: JSON.stringify(patch)
+    });
+  } catch(err) {
+    console.warn('[saveMachineSettings]', err.message || err);
+  }
 }
 
 // Conserve pour les slots gratuits (price === 0) : simple trace, pas de debit.
@@ -3059,7 +3078,14 @@ async function confirmReservation() {
       });
     } catch(err) {
       const msg = (err && err.message) ? err.message : String(err);
-      const friendly = /insuffisant/i.test(msg) ? 'Solde insuffisant' : 'Achat refuse : ' + msg.substring(0,80);
+      var friendly;
+      if(/insuffisant/i.test(msg))                     friendly = 'Solde insuffisant';
+      else if(/could not find.*function|does not exist|PGRST202/i.test(msg))
+        friendly = 'RPC lunch_purchase manquante — migration SQL non deployee';
+      else if(/profil introuvable/i.test(msg))         friendly = 'Profil resident introuvable sur CoHabitat';
+      else if(/dependant introuvable/i.test(msg))      friendly = 'Dependant introuvable';
+      else                                             friendly = 'Achat refuse : ' + msg.substring(0,80);
+      console.error('[rpcLunchPurchase]', msg);
       showSuccess('✗ ' + friendly, '#' + slotId + ' — ' + zoneName);
       return;
     }
@@ -3226,6 +3252,7 @@ function updateAutoSpeed(v) {
   var n = Math.max(1, Math.min(10, parseInt(v) || 5));
   state.gantryAutoSpeed = n;
   saveState();
+  saveMachineSettingsToSupabase({ gantry_auto_speed: n });
   var el = document.getElementById('gantry-auto-speed-val');
   if(el) el.textContent = n;
 }
@@ -4176,7 +4203,9 @@ function saveTemperatures() {
     const mx  = parseFloat(document.getElementById(`spmax-${id}`)?.value);
     if(!isNaN(mx)) z.setpointMax = mx;
   });
-  saveState(); renderTempStrips(); renderMachineZoneOverlays(); flashSave();
+  saveState();
+  saveMachineSettingsToSupabase({ color_ranges: state.colorRanges });
+  renderTempStrips(); renderMachineZoneOverlays(); flashSave();
 }
 
 function renderAdminConfig() {
@@ -4230,12 +4259,19 @@ function saveBoxConfig() {
   if(!isNaN(bm) && bm >= 0) state.boxMax = bm;
   if(!isNaN(bc) && bc >= 0) state.boxCount = Math.min(bc, state.boxMax);
   saveState();
+  saveMachineSettingsToSupabase({ box_max: state.boxMax, box_count: state.boxCount });
   renderHomeStats();
   flashSave();
 }
 function savePin() {
   const val = document.getElementById('new-pin').value.trim();
-  if(val.length===4&&/^\d{4}$/.test(val)) { state.pin=val; saveState(); document.getElementById('new-pin').value=''; flashSave(); }
+  if(val.length===4&&/^\d{4}$/.test(val)) {
+    state.pin=val;
+    saveState();
+    saveMachineSettingsToSupabase({ pin: val });
+    document.getElementById('new-pin').value='';
+    flashSave();
+  }
 }
 
 function renderAdminStatus() {
@@ -4805,11 +4841,19 @@ window.gantryWaitingPickup = false;
       }
 
     // ── RETURNMOVE : ramener le plateau dans son casier ───────────────────
+    // On re-mesure la position X+Z du slot (le DOM a pu bouger entre temps
+    // si la page a ete scrollee, si le rendu a change de hauteurs, etc.).
+    // Le zTarget initialement stocke sert de fallback.
     } else if(G.phase==='returnMove') {
-      if(G.currentJob) G.targetX = G.currentJob.xFrac;
-      var zBack = (G.currentJob && typeof G.currentJob.zTarget === 'number') ? G.currentJob.zTarget : zSlot;
-      G.targetZ = zBack;
-      if(G.currentJob && nearX(G.x, G.currentJob.xFrac) && nearZ(G.z, zBack)) {
+      if(G.currentJob) {
+        COL_X = getColXFracs();
+        G.currentJob.xFrac = (G.currentJob.zone === 'A') ? COL_X.Z1 : COL_X.Z2;
+        var fresh = getSlotZ(G.currentJob.zone, G.currentJob.slotId);
+        if(fresh !== null) G.currentJob.zTarget = fresh;
+        G.targetX = G.currentJob.xFrac;
+        G.targetZ = G.currentJob.zTarget;
+      }
+      if(G.currentJob && nearX(G.x, G.currentJob.xFrac) && nearZ(G.z, G.currentJob.zTarget)) {
         G.carrying = false;
         soundPickupDrop();
         G.phase = 'returnDrop';
