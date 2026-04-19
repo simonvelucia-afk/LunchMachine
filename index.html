@@ -925,6 +925,8 @@
       <div class="topbar-time" id="clock2">--:--</div>
       <div id="lunch-user-badge-grid" style="display:none;align-items:center;gap:6px;font-family:'Barlow Condensed',sans-serif;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--success);border:1px solid rgba(93,232,140,.3);padding:2px 8px;background:rgba(93,232,140,.07);">
         <span id="lunch-user-name-grid"></span>
+        <!-- Solde discret : visible mais petit, couleur attenuee pour ne pas attirer l'attention. -->
+        <span id="lunch-user-balance-grid" title="Votre solde virtuel" style="display:none;font-family:'Space Mono',monospace;font-size:9px;font-weight:400;color:var(--text-dim);letter-spacing:.02em;text-transform:none;opacity:.7;margin-left:2px;"></span>
         <button onclick="lunchDone()" style="background:rgba(93,232,140,.15);border:1px solid rgba(93,232,140,.4);color:var(--success);font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:.06em;padding:1px 6px;cursor:pointer;margin-left:2px;">J'ai terminé ✓</button>
       </div>
       <button class="topbar-btn" id="btn-admin-grid" onclick="goAdmin()" style="display:none;">ADMIN</button>
@@ -1373,6 +1375,15 @@
             <div id="confirm-person-name" style="font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:700;letter-spacing:.05em;color:var(--text);"></div>
             <div id="confirm-person-unit" style="font-size:11px;color:var(--text-dim);"></div>
           </div>
+        </div>
+        <!-- Recap chiffre : cout + solde courant + solde apres achat -->
+        <div id="confirm-money" style="background:var(--bg);border:1px solid var(--border);padding:10px 12px;display:grid;grid-template-columns:1fr auto;gap:6px 14px;font-family:'Space Mono',monospace;font-size:13px;">
+          <div style="color:var(--text-dim);">Coût</div>
+          <div id="cm-cost" style="color:var(--accent);font-weight:700;text-align:right;">—</div>
+          <div style="color:var(--text-dim);">Solde actuel</div>
+          <div id="cm-balance" style="color:var(--text);text-align:right;">—</div>
+          <div style="color:var(--text-dim);border-top:1px dashed var(--border);padding-top:6px;">Solde après</div>
+          <div id="cm-after" style="color:var(--text);text-align:right;border-top:1px dashed var(--border);padding-top:6px;">—</div>
         </div>
         <div class="confirm-msg" style="font-size:12px;color:var(--text-dim);">Confirmez l'achat pour cette personne.</div>
         <div style="display:flex;gap:8px;justify-content:flex-end;">
@@ -2024,6 +2035,53 @@ async function rpcLunchPurchase({ userId, depId, slotDbId, buyerName, price }) {
     throw new Error(txt || ('RPC ' + res.status));
   }
   return await res.json();
+}
+
+// Recupere le solde virtuel courant depuis CoHabitat. Si depId est fourni,
+// retourne le solde du dependant ; sinon celui du resident principal.
+// Retourne null si offline, profile manquant, ou erreur reseau (l'UI doit
+// alors afficher "—" pour rester sobre plutot que "0$" qui serait trompeur).
+async function fetchUserBalance(userId, depId) {
+  if(!NET_MODE || !userId) return null;
+  try {
+    var path = depId
+      ? 'dependents?id=eq.' + encodeURIComponent(depId) + '&select=virtual_balance'
+      : 'profiles?id=eq.' + encodeURIComponent(userId) + '&select=virtual_balance';
+    var rows = await qFetch(path);
+    if(!rows || !rows.length) return null;
+    var v = parseFloat(rows[0].virtual_balance);
+    return isNaN(v) ? null : v;
+  } catch(err) {
+    console.warn('[fetchUserBalance]', err.message || err);
+    return null;
+  }
+}
+
+// Met a jour le badge de solde dans l'entete kiosque (petit, discret).
+// Appele apres login, apres chaque achat, et apres chaque rafraichissement.
+function renderHeaderBalance() {
+  var el = document.getElementById('lunch-user-balance-grid');
+  if(!el) return;
+  if(_lastBalance === null || _lastBalance === undefined) {
+    el.style.display = 'none';
+    el.textContent = '';
+    return;
+  }
+  el.style.display = '';
+  el.textContent = _lastBalance.toFixed(2) + ' $';
+}
+let _lastBalance = null;
+
+async function refreshHeaderBalance() {
+  if(!lunchSession || !lunchSession.profile) {
+    _lastBalance = null;
+    renderHeaderBalance();
+    return;
+  }
+  // Toujours le solde du resident principal pour l'entete (le selecteur
+  // d'achat affichera celui du dependant choisi le cas echeant).
+  _lastBalance = await fetchUserBalance(lunchSession.profile.id, null);
+  renderHeaderBalance();
 }
 
 // Sauvegarde les reglages de la machine (box_max, box_count, vitesse auto,
@@ -2690,6 +2748,8 @@ async function lunchDone() {
   }
   lunchSession = null;
   lunchSelectedPerson = null;
+  _lastBalance = null;
+  renderHeaderBalance();
   clearTimeout(lunchSessionTimer);
   queueUnsubscribe();
   updateAdminBtn();
@@ -2700,20 +2760,24 @@ async function lunchDone() {
 }
 
 // Notifie CoHabitat (window.opener) pour forcer un refresh immediat des cartes
-// machine, puis tente de fermer l'onglet. Si le navigateur bloque window.close()
-// (cas kiosque Pi en plein ecran, ou onglet ouvert directement), on affiche un
-// overlay "Vous pouvez fermer cet onglet" pour que l'usager n'ait rien a faire.
+// machine, puis tente de fermer l'onglet UNIQUEMENT si le kiosque a ete ouvert
+// depuis une autre fenetre (cas resident qui clique "Acheter" depuis CoHabitat).
+//
+// En kiosque borne (onglet seul, mode plein ecran ou navigateur dedie), il n'y
+// a pas d'opener : on ne ferme rien et on n'affiche pas d'overlay bloquant ;
+// l'utilisateur reste sur l'ecran d'accueil pour qu'un autre puisse demarrer
+// une nouvelle session sans avoir a recharger la page.
 function notifyOpenerAndClose() {
+  var hasOpener = false;
   try {
     if(window.opener && !window.opener.closed) {
+      hasOpener = true;
       window.opener.postMessage({ type: 'lunch-done', machineId: MACHINE_ID }, '*');
     }
   } catch(e) {}
-  // On laisse un court delai pour que le message parte avant la fermeture
+  if(!hasOpener) return; // mode borne : ecran d'accueil deja affiche, c'est fini
   setTimeout(function() {
-    // Tentative de fermeture (fonctionne si ouvert via window.open depuis CoHabitat)
     window.close();
-    // Fallback : si on est toujours la apres 300ms, afficher l'overlay
     setTimeout(function() {
       if(!document.hidden) showDoneOverlay();
     }, 300);
@@ -2859,6 +2923,7 @@ async function doLunchLogin() {
     resetLunchSessionTimer();
     updateAdminBtn();
     queueJoin(); // Rejoindre ou mettre à jour la file d'attente
+    refreshHeaderBalance();
 
     // Passer à l'étape sélecteur
     showAuthStep('select');
@@ -2959,15 +3024,41 @@ function renderPersonSelector() {
   });
 }
 
-function selectLunchPerson(p) {
+async function selectLunchPerson(p) {
   lunchSelectedPerson = p;
   resetLunchSessionTimer();
-  // Afficher confirmation
   var nameEl = document.getElementById('confirm-person-name');
   var unitEl = document.getElementById('confirm-person-unit');
   if(nameEl) nameEl.textContent = p.label;
   if(unitEl) unitEl.textContent = p.sub || '';
+
+  // Recap chiffre — reset puis fetch le solde de la bonne personne (resident
+  // ou dependant selon p.depId). On affiche "—" pendant la requete pour eviter
+  // de montrer un solde perime qui appartiendrait a un autre membre.
+  var slot = state.slots.find(function(s) { return s.id === selectedSlotId; });
+  var price = slot ? (parseFloat(slot.price) || 0) : 0;
+  var costEl = document.getElementById('cm-cost');
+  var balEl  = document.getElementById('cm-balance');
+  var aftEl  = document.getElementById('cm-after');
+  if(costEl) costEl.textContent = price > 0 ? price.toFixed(2) + ' $' : 'Gratuit';
+  if(balEl)  balEl.textContent  = '…';
+  if(aftEl)  aftEl.textContent  = '…';
   showAuthStep('confirm');
+
+  var bal = await fetchUserBalance(lunchSession && lunchSession.profile ? lunchSession.profile.id : null, p.depId);
+  // Si l'utilisateur a deja change de personne entretemps, on n'ecrase pas
+  if(lunchSelectedPerson !== p) return;
+  if(balEl) balEl.textContent = (bal === null) ? 'inconnu' : bal.toFixed(2) + ' $';
+  if(aftEl) {
+    if(bal === null) {
+      aftEl.textContent = 'inconnu';
+      aftEl.style.color = 'var(--text)';
+    } else {
+      var after = bal - price;
+      aftEl.textContent = after.toFixed(2) + ' $';
+      aftEl.style.color = (after < 0) ? 'var(--accent3)' : 'var(--text)';
+    }
+  }
 }
 
 function authBackToLogin() {
@@ -3069,13 +3160,14 @@ async function confirmReservation() {
   // Si l'appel echoue (solde insuffisant, etc.), on abandonne sans consommer le slot.
   if(NET_MODE && price > 0 && lunchSession?.profile?.id) {
     try {
-      await rpcLunchPurchase({
+      var rpcResult = await rpcLunchPurchase({
         userId:   lunchSession.profile.id,
         depId:    lunchSelectedPerson.depId,
         slotDbId: slotDbId,
         buyerName: buyer,
         price:    price
       });
+      console.log('[lunch_purchase] tx id =', rpcResult, '| user=', lunchSession.profile.id, 'dep=', lunchSelectedPerson.depId, 'amount=', price);
     } catch(err) {
       const msg = (err && err.message) ? err.message : String(err);
       var friendly;
@@ -3113,6 +3205,11 @@ async function confirmReservation() {
   window.gantryQueue.push({ slotId: slotId, xFrac: xFrac, zone: zoneId, desc: slotDesc, price: price });
 
   showSuccess(t('successMsg', buyer), '#' + slotId + ' — ' + zoneName + ' — ' + priceStr);
+
+  // Rafraichir le solde affiche dans l'entete. Sert aussi de diagnostic :
+  // si le solde ne change pas apres un achat reussi, c'est que la RPC a
+  // retourne sans debiter (probleme de policy, signature, ou DB cible).
+  if(price > 0) refreshHeaderBalance();
 }
 
 function showSuccess(msg, sub) {
@@ -4368,6 +4465,7 @@ updateAdminBtn();
     updateAdminBtn();
     queueRender();
     queueJoin();
+    refreshHeaderBalance();
   } catch(e) { console.error('[chsession] erreur:', e.message || e); }
 })();
 
@@ -4662,13 +4760,15 @@ window.gantryWaitingPickup = false;
 
     // ── Spring normal — stiffness module par le reglage "Vitesse auto" ──
     // state.gantryAutoSpeed : 1..10 (defaut 5). Mappe a une stiffness
-    // plausible [0.06 .. 0.30] et un damping legerement plus ferme quand
-    // on accelere pour eviter l'overshoot.
+    // [0.018 .. 0.30]. Le plancher tres bas permet un mode "lent et calme"
+    // pour les premiers jours d'install ou les heures creuses ; le pas de
+    // 1 a 2 multiplie la vitesse par ~2 pour un controle utile sur toute
+    // la plage. Damping passe de 0.88 (1) a 0.78 (10) pour rester stable.
     var _auto = (state && typeof state.gantryAutoSpeed === 'number') ? state.gantryAutoSpeed : 5;
     _auto = Math.max(1, Math.min(10, _auto));
-    var _stiffX = 0.06 + (_auto - 1) * (0.30 - 0.06) / 9;
+    var _stiffX = 0.018 + (_auto - 1) * (0.30 - 0.018) / 9;
     var _stiffZ = _stiffX * 0.9;
-    var _damp   = 0.82 - (_auto - 5) * 0.008; // 0.85..0.78
+    var _damp   = 0.88 - (_auto - 1) * 0.011; // 0.88..0.78
     var sx = springStep(G.x, G.targetX, G.vx, _stiffX, _damp);
     G.vx = sx.v; G.x = sx.p;
     var sz = springStep(G.z, G.targetZ, G.vz, _stiffZ, _damp);
