@@ -635,11 +635,11 @@
 </head>
 <body>
 <!-- Identite connectee : pill solde + avatar initiales, style calque sur CoHabitat
-     (cohabitat.modulimo.com). Reste au meme endroit visuel quand l'usager passe
-     d'un onglet a l'autre, pour que l'experience paraisse continue. Toujours
-     visible (fixed top-right) tant que l'usager est connecte. Caches en CSS
-     quand #user-identity a display:none. -->
-<div id="user-identity" style="display:none;position:fixed;top:6px;right:8px;z-index:9998;gap:5px;align-items:center;pointer-events:none;">
+     (cohabitat.modulimo.com). Element inline-flex sans position fixed : il est
+     deplace dans la .topbar de l'ecran actif par mountIdentityInTopbar() pour
+     que les autres boutons (ADMIN, Retour, switch langues) restent visibles et
+     se rearrangent naturellement autour, au lieu d'etre recouverts. -->
+<div id="user-identity" style="display:none;gap:5px;align-items:center;flex-shrink:0;">
   <div id="ui-balance" style="background:#1f2226;border:1px solid #2a2e33;border-radius:12px;padding:2px 8px;font-family:'Space Mono',monospace;font-size:10px;color:#5de88c;font-weight:500;letter-spacing:.02em;line-height:1.4;">—</div>
   <div id="ui-avatar" style="width:20px;height:20px;background:#2a2e33;border:1px solid #3a3f46;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;color:#e8c547;letter-spacing:.04em;line-height:1;">?</div>
 </div>
@@ -2114,7 +2114,19 @@ function renderHeaderBalance() {
     grid.textContent   = hasBalance ? (_lastBalance.toFixed(2) + ' $') : '';
   }
 
-  if(ident) ident.style.display = hasSession ? 'flex' : 'none';
+  if(ident) {
+    ident.style.display = hasSession ? 'flex' : 'none';
+    // Toujours remonter dans la topbar de l'ecran actif au cas ou l'usager
+    // se loggue pendant qu'un ecran sans identity mountee est affiche
+    // (typiquement screen-home au premier load avant showScreen).
+    if(hasSession) {
+      var activeScreen = document.querySelector('.screen.active');
+      if(activeScreen) {
+        var bar = activeScreen.querySelector('.topbar');
+        if(bar && ident.parentElement !== bar) bar.appendChild(ident);
+      }
+    }
+  }
   if(pill)  pill.textContent    = hasBalance ? (_lastBalance.toFixed(2) + ' $ CAD') : '— $ CAD';
   if(avatar) {
     var fn = (lunchSession && lunchSession.profile && lunchSession.profile.full_name) || '';
@@ -2264,9 +2276,23 @@ setInterval(updateClock,1000); updateClock();
 //  SCREENS
 // ═══════════════════════════════
 
+// Deplace #user-identity a la fin de la topbar de l'ecran donne pour que
+// le pill+avatar apparaissent comme les derniers items de la barre (apres
+// ADMIN / Retour / langues). Si pas de topbar, l'element est simplement
+// absent de la page (ecran PIN par exemple n'a pas d'interet a afficher
+// le solde).
+function mountIdentityInTopbar(screenId) {
+  var ident = document.getElementById('user-identity');
+  if(!ident) return;
+  var screen = document.getElementById(screenId);
+  var bar = screen ? screen.querySelector('.topbar') : null;
+  if(bar) bar.appendChild(ident);
+}
+
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
+  mountIdentityInTopbar(id);
   if(id === 'screen-grid') { renderGrid(); queueRender(); }
   if(id === 'screen-admin') renderAdmin();
   if(id === 'screen-home') {
