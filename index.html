@@ -634,6 +634,9 @@
 </style>
 </head>
 <body>
+<!-- Solde global discret : toujours visible pour l'usager connecte, sur tous les
+     ecrans du kiosque (home / grid / pin / admin). Small, monospace, semi-transparent. -->
+<div id="global-balance" style="display:none;position:fixed;top:6px;right:8px;z-index:9998;font-family:'Space Mono',monospace;font-size:10px;font-weight:400;color:#b0b0b0;background:rgba(14,14,14,0.55);border:1px solid rgba(255,255,255,0.08);padding:2px 7px;letter-spacing:.02em;pointer-events:none;backdrop-filter:blur(4px);">—</div>
 <div id="app">
 
   <!-- HOME -->
@@ -2087,18 +2090,22 @@ async function fetchUserBalance(userId, depId) {
   }
 }
 
-// Met a jour le badge de solde dans l'entete kiosque (petit, discret).
+// Met a jour le badge de solde dans l'entete de l'ecran grille (petit, discret)
+// ET le solde global fixed qui flotte en haut a droite sur TOUS les ecrans.
 // Appele apres login, apres chaque achat, et apres chaque rafraichissement.
 function renderHeaderBalance() {
-  var el = document.getElementById('lunch-user-balance-grid');
-  if(!el) return;
-  if(_lastBalance === null || _lastBalance === undefined) {
-    el.style.display = 'none';
-    el.textContent = '';
-    return;
+  var grid = document.getElementById('lunch-user-balance-grid');
+  var glob = document.getElementById('global-balance');
+  var hasBalance = (_lastBalance !== null && _lastBalance !== undefined);
+  var txt = hasBalance ? _lastBalance.toFixed(2) + ' $' : '';
+  if(grid) {
+    grid.style.display = hasBalance ? '' : 'none';
+    grid.textContent = txt;
   }
-  el.style.display = '';
-  el.textContent = _lastBalance.toFixed(2) + ' $';
+  if(glob) {
+    glob.style.display = hasBalance ? '' : 'none';
+    glob.textContent = txt;
+  }
 }
 let _lastBalance = null;
 
@@ -2125,8 +2132,12 @@ async function saveMachineSettingsToSupabase(patch) {
       method: 'PATCH',
       body: JSON.stringify(patch)
     });
+    console.log('[saveMachineSettings] OK', patch);
   } catch(err) {
-    console.warn('[saveMachineSettings]', err.message || err);
+    // Diagnostic visible : si la migration 005 n'est pas deployee (colonnes
+    // absentes) ou si la policy UPDATE bloque, l'utilisateur doit le savoir
+    // sinon le reglage semble "marcher" mais ne persiste pas au reload.
+    console.error('[saveMachineSettings] ECHEC', patch, '->', err.message || err);
   }
 }
 
@@ -4861,15 +4872,13 @@ window.gantryWaitingPickup = false;
 
     // ── Spring normal — stiffness module par le reglage "Vitesse auto" ──
     // state.gantryAutoSpeed : 1..10 (defaut 5). Mappe a une stiffness
-    // [0.018 .. 0.30]. Le plancher tres bas permet un mode "lent et calme"
-    // pour les premiers jours d'install ou les heures creuses ; le pas de
-    // 1 a 2 multiplie la vitesse par ~2 pour un controle utile sur toute
-    // la plage. Damping passe de 0.88 (1) a 0.78 (10) pour rester stable.
+    // [0.008 .. 0.30]. Plancher tres bas pour mode "quasi immobile" au
+    // cran 1. Damping passe de 0.92 (1) a 0.78 (10).
     var _auto = (state && typeof state.gantryAutoSpeed === 'number') ? state.gantryAutoSpeed : 5;
     _auto = Math.max(1, Math.min(10, _auto));
-    var _stiffX = 0.018 + (_auto - 1) * (0.30 - 0.018) / 9;
+    var _stiffX = 0.008 + (_auto - 1) * (0.30 - 0.008) / 9;
     var _stiffZ = _stiffX * 0.9;
-    var _damp   = 0.88 - (_auto - 1) * 0.011; // 0.88..0.78
+    var _damp   = 0.92 - (_auto - 1) * 0.0156; // 0.92..0.78
     var sx = springStep(G.x, G.targetX, G.vx, _stiffX, _damp);
     G.vx = sx.v; G.x = sx.p;
     var sz = springStep(G.z, G.targetZ, G.vz, _stiffZ, _damp);
