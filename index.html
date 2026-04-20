@@ -1127,6 +1127,10 @@
                 <div class="admin-field-label">Chef / cuisinier</div>
                 <input class="admin-field-input" type="text" id="mf-chef" placeholder="Prénom Nom" style="width:100%;"/>
               </div>
+              <div>
+                <div class="admin-field-label" title="Si renseignee, l'onglet Statuts affichera les jours restants et encadrera la case en rouge si depassee.">Date d'expiration</div>
+                <input class="admin-field-input" type="date" id="mf-expdate" style="width:100%;"/>
+              </div>
             </div>
           </div>
           <!-- Ingrédients -->
@@ -1919,6 +1923,7 @@ async function loadFromSupabase() {
       photo:       s.photo_url || '',
       chef:        s.chef || '',
       prepDate:    s.prep_date || '',
+      expDate:     s.exp_date || '',
       ingredients: s.ingredients || '',
       allergens:   s.allergens || [],
       calories:    s.calories || 0,
@@ -1971,6 +1976,7 @@ async function saveSlotToSupabase(slot) {
       photo_url:   slot.photo,
       chef:        slot.chef,
       prep_date:   slot.prepDate,
+      exp_date:    slot.expDate || null,
       ingredients: slot.ingredients,
       allergens:   slot.allergens,
       calories:    slot.calories,
@@ -2025,7 +2031,10 @@ async function rpcLunchPurchase({ userId, depId, slotDbId, buyerName, price }) {
       p_user_id:   userId,
       p_dep_id:    depId || null,
       p_machine_id: MACHINE_ID,
-      p_slot_db_id: slotDbId,
+      // p_slot_db_id est typee TEXT cote SQL pour s'adapter a tout type
+      // d'ID de lunch_slots (UUID, INT, TEXT). On force String() ici pour
+      // que PostgREST recoive bien une chaine et pas un nombre.
+      p_slot_db_id: slotDbId == null ? null : String(slotDbId),
       p_buyer_name: buyerName || '',
       p_amount:    Number(price) || 0
     })
@@ -2042,17 +2051,38 @@ async function rpcLunchPurchase({ userId, depId, slotDbId, buyerName, price }) {
 // Retourne null si offline, profile manquant, ou erreur reseau (l'UI doit
 // alors afficher "—" pour rester sobre plutot que "0$" qui serait trompeur).
 async function fetchUserBalance(userId, depId) {
-  if(!NET_MODE || !userId) return null;
+  if(!NET_MODE || !userId) {
+    console.log('[fetchUserBalance] skip:', { NET_MODE: NET_MODE, userId: userId });
+    return null;
+  }
+  // On passe par la RPC SECURITY DEFINER plutot que de tenter un SELECT
+  // direct sur profiles/dependents : la cle anon n'a pas le droit de lire
+  // virtual_balance via RLS, et on ne veut pas ouvrir cette table a anon.
+  // La RPC est definie dans CoHabitat/sql/001_lunch_coherence.sql (section D).
   try {
-    var path = depId
-      ? 'dependents?id=eq.' + encodeURIComponent(depId) + '&select=virtual_balance'
-      : 'profiles?id=eq.' + encodeURIComponent(userId) + '&select=virtual_balance';
-    var rows = await qFetch(path);
-    if(!rows || !rows.length) return null;
-    var v = parseFloat(rows[0].virtual_balance);
-    return isNaN(v) ? null : v;
+    var res = await fetch(CH_URL + '/rest/v1/rpc/lunch_get_balance', {
+      method: 'POST',
+      headers: {
+        'apikey': CH_ANON,
+        'Authorization': 'Bearer ' + CH_ANON,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ p_user_id: userId, p_dep_id: depId || null })
+    });
+    if(!res.ok) {
+      var txt = await res.text();
+      console.warn('[fetchUserBalance] RPC ' + res.status + ':', txt.substring(0,200));
+      return null;
+    }
+    var v = await res.json();
+    if(v === null || v === undefined) {
+      console.warn('[fetchUserBalance] RPC a renvoye null pour', depId ? 'dep='+depId : 'user='+userId);
+      return null;
+    }
+    var n = parseFloat(v);
+    return isNaN(n) ? null : n;
   } catch(err) {
-    console.warn('[fetchUserBalance]', err.message || err);
+    console.warn('[fetchUserBalance] erreur reseau:', err.message || err);
     return null;
   }
 }
@@ -3170,14 +3200,19 @@ async function confirmReservation() {
       console.log('[lunch_purchase] tx id =', rpcResult, '| user=', lunchSession.profile.id, 'dep=', lunchSelectedPerson.depId, 'amount=', price);
     } catch(err) {
       const msg = (err && err.message) ? err.message : String(err);
+      // On reste tres restrictif sur la classification "RPC manquante" : seul
+      // le code PGRST202 ou la phrase explicite "Could not find the function"
+      // doivent declencher ce message. "does not exist" tout court est trop
+      // general (peut viser une colonne, un schema, une autre RPC) et nous
+      // a deja induit en erreur en pointant vers une migration deja deployee.
       var friendly;
-      if(/insuffisant/i.test(msg))                     friendly = 'Solde insuffisant';
-      else if(/could not find.*function|does not exist|PGRST202/i.test(msg))
-        friendly = 'RPC lunch_purchase manquante — migration SQL non deployee';
-      else if(/profil introuvable/i.test(msg))         friendly = 'Profil resident introuvable sur CoHabitat';
-      else if(/dependant introuvable/i.test(msg))      friendly = 'Dependant introuvable';
-      else                                             friendly = 'Achat refuse : ' + msg.substring(0,80);
-      console.error('[rpcLunchPurchase]', msg);
+      if(/insuffisant/i.test(msg))                                friendly = 'Solde insuffisant';
+      else if(/PGRST202|could not find the function/i.test(msg))  friendly = 'RPC lunch_purchase manquante — migration SQL non deployee';
+      else if(/profil introuvable/i.test(msg))                    friendly = 'Profil resident introuvable sur CoHabitat';
+      else if(/dependant introuvable/i.test(msg))                 friendly = 'Dependant introuvable';
+      else                                                        friendly = 'Achat refuse : ' + msg.substring(0,200);
+      console.error('[rpcLunchPurchase] echec:', msg);
+      console.error('[rpcLunchPurchase] params:', { user: lunchSession.profile.id, dep: lunchSelectedPerson.depId, slot: slotDbId, machine: MACHINE_ID, amount: price });
       showSuccess('✗ ' + friendly, '#' + slotId + ' — ' + zoneName);
       return;
     }
@@ -3188,6 +3223,7 @@ async function confirmReservation() {
   slot.price = 0;
   slot.reserved = false;
   slot.reservedBy = '';
+  slot.expDate = '';
 
   saveState();
   if(NET_MODE) {
@@ -3534,7 +3570,7 @@ function openMenuForm(id) {
     // Nouveau menu — vider le formulaire
     title.textContent = 'Nouveau menu';
     if(delBtn) delBtn.style.display = 'none';
-    ['mf-desc','mf-photo','mf-chef','mf-ingredients'].forEach(function(eid){
+    ['mf-desc','mf-photo','mf-chef','mf-ingredients','mf-expdate'].forEach(function(eid){
       var el = document.getElementById(eid); if(el) el.value='';
     });
     ['mf-price','mf-calories','mf-proteines','mf-glucides','mf-lipides'].forEach(function(eid){
@@ -3554,6 +3590,7 @@ function openMenuForm(id) {
     const rawPhoto = m.photo || '';
     document.getElementById('mf-photo').value = rawPhoto.startsWith(GITHUB_IMG_BASE) ? rawPhoto.replace(GITHUB_IMG_BASE,'') : rawPhoto;
     document.getElementById('mf-chef').value = m.chef || '';
+    document.getElementById('mf-expdate').value = m.expDate || '';
     document.getElementById('mf-ingredients').value = m.ingredients || '';
     document.getElementById('mf-calories').value = m.calories || '';
     document.getElementById('mf-proteines').value = m.proteines || '';
@@ -3611,6 +3648,7 @@ function saveMenuForm() {
     price:       parseFloat(document.getElementById('mf-price').value) || 0,
     photo:       buildPhotoUrl(document.getElementById('mf-photo').value.trim()),
     chef:        document.getElementById('mf-chef').value.trim(),
+    expDate:     document.getElementById('mf-expdate').value || '',
     ingredients: document.getElementById('mf-ingredients').value.trim(),
     calories:    parseFloat(document.getElementById('mf-calories').value) || 0,
     proteines:   parseFloat(document.getElementById('mf-proteines').value) || 0,
@@ -3653,6 +3691,7 @@ async function saveMenuToSupabase(menu) {
     price:       menu.price || 0,
     photo:       menu.photo || null,
     chef:        menu.chef || null,
+    exp_date:    menu.expDate || null,
     ingredients: menu.ingredients || null,
     allergens:   menu.allergens || [],
     calories:    menu.calories || null,
@@ -3691,6 +3730,7 @@ async function loadMenusFromSupabase() {
         price:       parseFloat(r.price) || 0,
         photo:       r.photo || '',
         chef:        r.chef || '',
+        expDate:     r.exp_date || '',
         ingredients: r.ingredients || '',
         allergens:   r.allergens || [],
         calories:    r.calories || 0,
@@ -3780,6 +3820,7 @@ function copyMenuIntoSlot(menu, slot) {
   slot.photo       = menu.photo;
   slot.chef        = menu.chef || '';
   slot.prepDate    = '';
+  slot.expDate     = menu.expDate || '';
   slot.ingredients = menu.ingredients;
   slot.calories    = menu.calories;
   slot.proteines   = menu.proteines;
@@ -4148,7 +4189,7 @@ function clearSlotDesc() {
   if(adminSelectedSlot===null) return;
   const slot = state.slots.find(s=>s.id===adminSelectedSlot);
   slot.desc=''; slot.price=0; slot.reserved=false; slot.reservedBy='';
-  slot.photo=''; slot.chef=''; slot.prepDate=''; slot.ingredients='';
+  slot.photo=''; slot.chef=''; slot.prepDate=''; slot.expDate=''; slot.ingredients='';
   slot.calories=0; slot.proteines=0; slot.glucides=0; slot.lipides=0; slot.allergens=[];
   // Reset form
   ['admin-slot-desc','admin-slot-photo','admin-slot-chef','admin-slot-date','admin-slot-ingredients'].forEach(function(id){
@@ -4392,16 +4433,46 @@ function renderAdminStatus() {
   html+=`<div class="admin-section-title" style="margin-top:0;">${t('adminForSaleTitle')}</div>`;
   const active=state.slots.filter(s=>s.desc);
   if(!active.length) html+=`<div style="color:var(--text-faint);font-size:12px;">${t('adminNone')}</div>`;
-  else active.forEach(slot => {
-    const color = zoneColor(state.zones[slot.zone]??{});
-    const priceStr = slot.price > 0 ? slot.price.toFixed(2)+' $' : '—';
-    html+=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;padding:6px 8px;background:var(--bg);border:1px solid var(--border);">
-      <span style="font-family:'Space Mono',monospace;font-size:11px;color:var(--text-dim);">#${slot.id}</span>
-      <span style="display:inline-flex;align-items:center;gap:4px;padding:2px 6px;font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;background:${color}22;color:${color};border:1px solid ${color}55;">${state.zones[slot.zone]?.name}</span>
-      <span style="flex:1;font-size:11px;color:var(--text-dim);">${slot.desc?.substring(0,30)}${slot.desc?.length>30?'…':''}</span>
-      <span style="font-family:'Space Mono',monospace;font-size:12px;color:var(--accent);font-weight:700;">${priceStr}</span>
-    </div>`;
-  });
+  else {
+    // Date d'aujourd'hui en local-midnight pour comparer aux exp_date qui sont
+    // des DATE (sans heure). On convertit slot.expDate (string YYYY-MM-DD) en
+    // jours restants ; <0 = expire, encadre rouge ; <=2 = warning ambre ; sinon vert sobre.
+    const today = new Date(); today.setHours(0,0,0,0);
+    active.forEach(slot => {
+      const color = zoneColor(state.zones[slot.zone]??{});
+      const priceStr = slot.price > 0 ? slot.price.toFixed(2)+' $' : '—';
+      let expHtml = '';
+      let rowBorder = '1px solid var(--border)';
+      if(slot.expDate) {
+        const exp = new Date(slot.expDate + 'T00:00:00');
+        const diffMs = exp.getTime() - today.getTime();
+        const diffDays = Math.floor(diffMs / 86400000);
+        let badgeColor, badgeBg, badgeText;
+        if(diffDays < 0) {
+          badgeColor = 'var(--accent3)';
+          badgeBg = 'rgba(232,80,71,.12)';
+          badgeText = 'EXPIRÉ il y a ' + Math.abs(diffDays) + ' j';
+          rowBorder = '2px solid var(--accent3)';
+        } else if(diffDays <= 2) {
+          badgeColor = '#e89847';
+          badgeBg = 'rgba(232,152,71,.12)';
+          badgeText = 'Reste ' + diffDays + ' j';
+        } else {
+          badgeColor = 'var(--text-dim)';
+          badgeBg = 'transparent';
+          badgeText = 'Reste ' + diffDays + ' j';
+        }
+        expHtml = `<span title="Expire le ${slot.expDate}" style="font-family:'Space Mono',monospace;font-size:10px;color:${badgeColor};background:${badgeBg};padding:1px 6px;border:1px solid ${badgeColor}55;letter-spacing:.04em;">${badgeText}</span>`;
+      }
+      html+=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;padding:6px 8px;background:var(--bg);border:${rowBorder};">
+        <span style="font-family:'Space Mono',monospace;font-size:11px;color:var(--text-dim);">#${slot.id}</span>
+        <span style="display:inline-flex;align-items:center;gap:4px;padding:2px 6px;font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;background:${color}22;color:${color};border:1px solid ${color}55;">${state.zones[slot.zone]?.name}</span>
+        <span style="flex:1;font-size:11px;color:var(--text-dim);">${slot.desc?.substring(0,30)}${slot.desc?.length>30?'…':''}</span>
+        ${expHtml}
+        <span style="font-family:'Space Mono',monospace;font-size:12px;color:var(--accent);font-weight:700;">${priceStr}</span>
+      </div>`;
+    });
+  }
   document.getElementById('status-content').innerHTML=html;
 }
 
@@ -4468,6 +4539,33 @@ updateAdminBtn();
     refreshHeaderBalance();
   } catch(e) { console.error('[chsession] erreur:', e.message || e); }
 })();
+
+// Cleanup au unload : si l'usager ferme l'onglet sans cliquer "J'ai termine",
+// on libere la file (DELETE sur lunch_queue) et on notifie l'opener pour qu'il
+// rafraichisse la carte machine. fetch(keepalive) garantit que la requete
+// part meme apres unload, contrairement a un fetch normal qui serait abandonne.
+function _kioskCleanupOnUnload() {
+  try {
+    if(_queueEntry && _queueEntry.id) {
+      fetch(COHAB_URL + '/rest/v1/lunch_queue?id=eq.' + encodeURIComponent(_queueEntry.id), {
+        method: 'DELETE',
+        keepalive: true,
+        headers: {
+          'apikey': COHAB_ANON,
+          'Authorization': 'Bearer ' + COHAB_ANON,
+          'Content-Type': 'application/json'
+        }
+      });
+    }
+    if(window.opener && !window.opener.closed) {
+      window.opener.postMessage({ type: 'lunch-done', machineId: MACHINE_ID }, '*');
+    }
+  } catch(e) {}
+}
+window.addEventListener('beforeunload', _kioskCleanupOnUnload);
+// pagehide complete beforeunload sur les navigateurs mobiles / Safari ou
+// beforeunload est parfois ignore.
+window.addEventListener('pagehide', _kioskCleanupOnUnload);
 
 // Mode réseau : charger depuis Supabase
 if(NET_MODE) {
