@@ -634,9 +634,15 @@
 </style>
 </head>
 <body>
-<!-- Solde global discret : toujours visible pour l'usager connecte, sur tous les
-     ecrans du kiosque (home / grid / pin / admin). Small, monospace, semi-transparent. -->
-<div id="global-balance" style="display:none;position:fixed;top:6px;right:8px;z-index:9998;font-family:'Space Mono',monospace;font-size:10px;font-weight:400;color:#b0b0b0;background:rgba(14,14,14,0.55);border:1px solid rgba(255,255,255,0.08);padding:2px 7px;letter-spacing:.02em;pointer-events:none;backdrop-filter:blur(4px);">—</div>
+<!-- Identite connectee : pill solde + avatar initiales, style calque sur CoHabitat
+     (cohabitat.modulimo.com). Reste au meme endroit visuel quand l'usager passe
+     d'un onglet a l'autre, pour que l'experience paraisse continue. Toujours
+     visible (fixed top-right) tant que l'usager est connecte. Caches en CSS
+     quand #user-identity a display:none. -->
+<div id="user-identity" style="display:none;position:fixed;top:8px;right:10px;z-index:9998;gap:8px;align-items:center;pointer-events:none;">
+  <div id="ui-balance" style="background:#1f2226;border:1px solid #2a2e33;border-radius:20px;padding:6px 14px;font-family:'Space Mono',monospace;font-size:14px;color:#5de88c;font-weight:500;letter-spacing:.02em;">—</div>
+  <div id="ui-avatar" style="width:36px;height:36px;background:#2a2e33;border:1px solid #3a3f46;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:700;color:#e8c547;letter-spacing:.04em;">?</div>
+</div>
 <div id="app">
 
   <!-- HOME -->
@@ -2090,21 +2096,30 @@ async function fetchUserBalance(userId, depId) {
   }
 }
 
-// Met a jour le badge de solde dans l'entete de l'ecran grille (petit, discret)
-// ET le solde global fixed qui flotte en haut a droite sur TOUS les ecrans.
-// Appele apres login, apres chaque achat, et apres chaque rafraichissement.
+// Met a jour les affichages de solde :
+// - badge discret dans la topbar de l'ecran grille (existant)
+// - pill+avatar fixes top-right calques sur CoHabitat, sur TOUS les ecrans.
+// Le pill et l'avatar ne s'affichent qu'une fois l'usager connecte (initiales
+// et solde connus).
 function renderHeaderBalance() {
-  var grid = document.getElementById('lunch-user-balance-grid');
-  var glob = document.getElementById('global-balance');
+  var grid   = document.getElementById('lunch-user-balance-grid');
+  var ident  = document.getElementById('user-identity');
+  var pill   = document.getElementById('ui-balance');
+  var avatar = document.getElementById('ui-avatar');
   var hasBalance = (_lastBalance !== null && _lastBalance !== undefined);
-  var txt = hasBalance ? _lastBalance.toFixed(2) + ' $' : '';
+  var hasSession = !!(lunchSession && lunchSession.profile);
+
   if(grid) {
     grid.style.display = hasBalance ? '' : 'none';
-    grid.textContent = txt;
+    grid.textContent   = hasBalance ? (_lastBalance.toFixed(2) + ' $') : '';
   }
-  if(glob) {
-    glob.style.display = hasBalance ? '' : 'none';
-    glob.textContent = txt;
+
+  if(ident) ident.style.display = hasSession ? 'flex' : 'none';
+  if(pill)  pill.textContent    = hasBalance ? (_lastBalance.toFixed(2) + ' $ CAD') : '— $ CAD';
+  if(avatar) {
+    var fn = (lunchSession && lunchSession.profile && lunchSession.profile.full_name) || '';
+    var initials = fn.split(' ').map(function(w){ return w[0]; }).join('').toUpperCase().slice(0,2) || '?';
+    avatar.textContent = initials;
   }
 }
 let _lastBalance = null;
