@@ -634,9 +634,15 @@
 </style>
 </head>
 <body>
-<!-- Solde global discret : toujours visible pour l'usager connecte, sur tous les
-     ecrans du kiosque (home / grid / pin / admin). Small, monospace, semi-transparent. -->
-<div id="global-balance" style="display:none;position:fixed;top:6px;right:8px;z-index:9998;font-family:'Space Mono',monospace;font-size:10px;font-weight:400;color:#b0b0b0;background:rgba(14,14,14,0.55);border:1px solid rgba(255,255,255,0.08);padding:2px 7px;letter-spacing:.02em;pointer-events:none;backdrop-filter:blur(4px);">—</div>
+<!-- Identite connectee : pill solde + avatar initiales, style calque sur CoHabitat
+     (cohabitat.modulimo.com). Reste au meme endroit visuel quand l'usager passe
+     d'un onglet a l'autre, pour que l'experience paraisse continue. Toujours
+     visible (fixed top-right) tant que l'usager est connecte. Caches en CSS
+     quand #user-identity a display:none. -->
+<div id="user-identity" style="display:none;position:fixed;top:8px;right:10px;z-index:9998;gap:8px;align-items:center;pointer-events:none;">
+  <div id="ui-balance" style="background:#1f2226;border:1px solid #2a2e33;border-radius:20px;padding:6px 14px;font-family:'Space Mono',monospace;font-size:14px;color:#5de88c;font-weight:500;letter-spacing:.02em;">—</div>
+  <div id="ui-avatar" style="width:36px;height:36px;background:#2a2e33;border:1px solid #3a3f46;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:700;color:#e8c547;letter-spacing:.04em;">?</div>
+</div>
 <div id="app">
 
   <!-- HOME -->
@@ -2090,21 +2096,30 @@ async function fetchUserBalance(userId, depId) {
   }
 }
 
-// Met a jour le badge de solde dans l'entete de l'ecran grille (petit, discret)
-// ET le solde global fixed qui flotte en haut a droite sur TOUS les ecrans.
-// Appele apres login, apres chaque achat, et apres chaque rafraichissement.
+// Met a jour les affichages de solde :
+// - badge discret dans la topbar de l'ecran grille (existant)
+// - pill+avatar fixes top-right calques sur CoHabitat, sur TOUS les ecrans.
+// Le pill et l'avatar ne s'affichent qu'une fois l'usager connecte (initiales
+// et solde connus).
 function renderHeaderBalance() {
-  var grid = document.getElementById('lunch-user-balance-grid');
-  var glob = document.getElementById('global-balance');
+  var grid   = document.getElementById('lunch-user-balance-grid');
+  var ident  = document.getElementById('user-identity');
+  var pill   = document.getElementById('ui-balance');
+  var avatar = document.getElementById('ui-avatar');
   var hasBalance = (_lastBalance !== null && _lastBalance !== undefined);
-  var txt = hasBalance ? _lastBalance.toFixed(2) + ' $' : '';
+  var hasSession = !!(lunchSession && lunchSession.profile);
+
   if(grid) {
     grid.style.display = hasBalance ? '' : 'none';
-    grid.textContent = txt;
+    grid.textContent   = hasBalance ? (_lastBalance.toFixed(2) + ' $') : '';
   }
-  if(glob) {
-    glob.style.display = hasBalance ? '' : 'none';
-    glob.textContent = txt;
+
+  if(ident) ident.style.display = hasSession ? 'flex' : 'none';
+  if(pill)  pill.textContent    = hasBalance ? (_lastBalance.toFixed(2) + ' $ CAD') : '— $ CAD';
+  if(avatar) {
+    var fn = (lunchSession && lunchSession.profile && lunchSession.profile.full_name) || '';
+    var initials = fn.split(' ').map(function(w){ return w[0]; }).join('').toUpperCase().slice(0,2) || '?';
+    avatar.textContent = initials;
   }
 }
 let _lastBalance = null;
@@ -3197,34 +3212,22 @@ async function confirmReservation() {
   const xFrac    = zoneId === ZONE_IDS[0] ? 0.551 : 0.849;
   const slotDbId = slot._db_id;
 
-  // En mode reseau avec prix > 0 : debit atomique via RPC (verifie solde + insere tx).
-  // Si l'appel echoue (solde insuffisant, etc.), on abandonne sans consommer le slot.
+  // NOUVEAU FLOW : le debit ne se fait PLUS ici. Il est desormais execute a
+  // confirmPickup(), quand le robot a livre le plat en zone de cueillette et
+  // que l'usager a pousse "J'AI PRIS". Si l'usager annule (cancelPickup), le
+  // plateau est remis en place et aucun debit ne survient.
+  //
+  // On fait quand meme un pre-check du solde ici pour ne pas laisser le robot
+  // aller chercher un plat si la personne n'a pas les fonds. lunch_get_balance
+  // est SECURITY DEFINER, contourne les RLS sur profiles/dependents.
   if(NET_MODE && price > 0 && lunchSession?.profile?.id) {
-    try {
-      var rpcResult = await rpcLunchPurchase({
-        userId:   lunchSession.profile.id,
-        depId:    lunchSelectedPerson.depId,
-        slotDbId: slotDbId,
-        buyerName: buyer,
-        price:    price
-      });
-      console.log('[lunch_purchase] tx id =', rpcResult, '| user=', lunchSession.profile.id, 'dep=', lunchSelectedPerson.depId, 'amount=', price);
-    } catch(err) {
-      const msg = (err && err.message) ? err.message : String(err);
-      // On reste tres restrictif sur la classification "RPC manquante" : seul
-      // le code PGRST202 ou la phrase explicite "Could not find the function"
-      // doivent declencher ce message. "does not exist" tout court est trop
-      // general (peut viser une colonne, un schema, une autre RPC) et nous
-      // a deja induit en erreur en pointant vers une migration deja deployee.
-      var friendly;
-      if(/insuffisant/i.test(msg))                                friendly = 'Solde insuffisant';
-      else if(/PGRST202|could not find the function/i.test(msg))  friendly = 'RPC lunch_purchase manquante — migration SQL non deployee';
-      else if(/profil introuvable/i.test(msg))                    friendly = 'Profil resident introuvable sur CoHabitat';
-      else if(/dependant introuvable/i.test(msg))                 friendly = 'Dependant introuvable';
-      else                                                        friendly = 'Achat refuse : ' + msg.substring(0,200);
-      console.error('[rpcLunchPurchase] echec:', msg);
-      console.error('[rpcLunchPurchase] params:', { user: lunchSession.profile.id, dep: lunchSelectedPerson.depId, slot: slotDbId, machine: MACHINE_ID, amount: price });
-      showSuccess('✗ ' + friendly, '#' + slotId + ' — ' + zoneName);
+    const bal = await fetchUserBalance(lunchSession.profile.id, lunchSelectedPerson.depId);
+    if(bal === null) {
+      showSuccess('✗ Solde indisponible — reessayez', '#' + slotId + ' — ' + zoneName);
+      return;
+    }
+    if(bal < price) {
+      showSuccess('✗ Solde insuffisant', bal.toFixed(2) + ' $ / ' + price.toFixed(2) + ' $ requis');
       return;
     }
   }
@@ -3249,14 +3252,22 @@ async function confirmReservation() {
   renderMachineSlots();
 
   window.gantryQueue = window.gantryQueue || [];
-  window.gantryQueue.push({ slotId: slotId, xFrac: xFrac, zone: zoneId, desc: slotDesc, price: price });
+  // On embarque les infos de paiement dans le job pour que confirmPickup()
+  // puisse appeler la RPC lunch_purchase au moment ou l'usager recupere le plat.
+  window.gantryQueue.push({
+    slotId: slotId,
+    xFrac: xFrac,
+    zone: zoneId,
+    desc: slotDesc,
+    price: price,
+    userId:   lunchSession?.profile?.id || null,
+    depId:    lunchSelectedPerson?.depId || null,
+    slotDbId: slotDbId,
+    buyerName: buyer,
+    zoneName: zoneName
+  });
 
   showSuccess(t('successMsg', buyer), '#' + slotId + ' — ' + zoneName + ' — ' + priceStr);
-
-  // Rafraichir le solde affiche dans l'entete. Sert aussi de diagnostic :
-  // si le solde ne change pas apres un achat reussi, c'est que la RPC a
-  // retourne sans debiter (probleme de policy, signature, ou DB cible).
-  if(price > 0) refreshHeaderBalance();
 }
 
 function showSuccess(msg, sub) {
@@ -4661,12 +4672,41 @@ window.gantryWaitingPickup = false;
     window.gantryQueue.push({ slotId: slotId, xFrac: xf });
   };
 
-  window.confirmPickup = function() {
+  window.confirmPickup = async function() {
     var empty  = document.getElementById('pickup-col-empty');
     var active = document.getElementById('pickup-col-active');
     if(active) active.style.display = 'none';
     if(empty)  empty.style.display  = 'flex';
     window.gantryWaitingPickup = false;
+
+    // NOUVEAU : le debit reel se fait ici, au moment ou l'usager confirme avoir
+    // pris le plat en zone de cueillette. Si cancelPickup est appele a la place,
+    // cette fonction n'est jamais executee et aucun debit n'a lieu.
+    var job = G.currentJob;
+    if(job && NET_MODE && job.price > 0 && job.userId) {
+      try {
+        var txId = await rpcLunchPurchase({
+          userId:   job.userId,
+          depId:    job.depId,
+          slotDbId: job.slotDbId,
+          buyerName: job.buyerName || '',
+          price:    job.price
+        });
+        console.log('[confirmPickup] debit OK | tx=', txId, '| user=', job.userId, 'dep=', job.depId, 'amount=', job.price);
+        refreshHeaderBalance();
+      } catch(err) {
+        // Le plat est physiquement en main de l'usager a ce stade. On log
+        // tres fort pour que l'admin puisse corriger manuellement plus tard,
+        // mais on ne retient pas le plat.
+        var msg = (err && err.message) ? err.message : String(err);
+        console.error('[confirmPickup] ECHEC DEBIT APRES LIVRAISON — intervention admin necessaire:', msg);
+        console.error('[confirmPickup] job:', job);
+        if(typeof showSuccess === 'function') {
+          showSuccess('⚠ Debit echoue — voir admin', msg.substring(0,80));
+        }
+      }
+    }
+
     // Le currentJob est conservé jusqu'à ce que le robot soit parké
     // La phase waitPickup détecte gantryWaitingPickup=false et passe à toPark
   };
