@@ -3719,9 +3719,12 @@ async function deleteMenuFromSupabase(menuId) {
 }
 
 async function loadMenusFromSupabase() {
-  if(!NET_MODE || !MACHINE_ID) return;
+  if(!NET_MODE) return;
   try {
-    const rows = await sbFetch('lunch_menus?machine_id=eq.' + MACHINE_ID + '&active=eq.true&select=*&order=updated_at.desc');
+    // Bibliotheque de menus partagee entre TOUTES les machines Modulimo : on
+    // ne filtre plus par machine_id. Le champ machine_id est conserve cote
+    // insertion pour tracer quelle machine (et donc quel chef) a cree le menu.
+    const rows = await sbFetch('lunch_menus?active=eq.true&select=*&order=updated_at.desc');
     if(!Array.isArray(rows)) return;
     state.menus = rows.map(function(r) {
       return {
