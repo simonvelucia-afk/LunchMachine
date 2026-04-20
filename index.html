@@ -3197,34 +3197,22 @@ async function confirmReservation() {
   const xFrac    = zoneId === ZONE_IDS[0] ? 0.551 : 0.849;
   const slotDbId = slot._db_id;
 
-  // En mode reseau avec prix > 0 : debit atomique via RPC (verifie solde + insere tx).
-  // Si l'appel echoue (solde insuffisant, etc.), on abandonne sans consommer le slot.
+  // NOUVEAU FLOW : le debit ne se fait PLUS ici. Il est desormais execute a
+  // confirmPickup(), quand le robot a livre le plat en zone de cueillette et
+  // que l'usager a pousse "J'AI PRIS". Si l'usager annule (cancelPickup), le
+  // plateau est remis en place et aucun debit ne survient.
+  //
+  // On fait quand meme un pre-check du solde ici pour ne pas laisser le robot
+  // aller chercher un plat si la personne n'a pas les fonds. lunch_get_balance
+  // est SECURITY DEFINER, contourne les RLS sur profiles/dependents.
   if(NET_MODE && price > 0 && lunchSession?.profile?.id) {
-    try {
-      var rpcResult = await rpcLunchPurchase({
-        userId:   lunchSession.profile.id,
-        depId:    lunchSelectedPerson.depId,
-        slotDbId: slotDbId,
-        buyerName: buyer,
-        price:    price
-      });
-      console.log('[lunch_purchase] tx id =', rpcResult, '| user=', lunchSession.profile.id, 'dep=', lunchSelectedPerson.depId, 'amount=', price);
-    } catch(err) {
-      const msg = (err && err.message) ? err.message : String(err);
-      // On reste tres restrictif sur la classification "RPC manquante" : seul
-      // le code PGRST202 ou la phrase explicite "Could not find the function"
-      // doivent declencher ce message. "does not exist" tout court est trop
-      // general (peut viser une colonne, un schema, une autre RPC) et nous
-      // a deja induit en erreur en pointant vers une migration deja deployee.
-      var friendly;
-      if(/insuffisant/i.test(msg))                                friendly = 'Solde insuffisant';
-      else if(/PGRST202|could not find the function/i.test(msg))  friendly = 'RPC lunch_purchase manquante — migration SQL non deployee';
-      else if(/profil introuvable/i.test(msg))                    friendly = 'Profil resident introuvable sur CoHabitat';
-      else if(/dependant introuvable/i.test(msg))                 friendly = 'Dependant introuvable';
-      else                                                        friendly = 'Achat refuse : ' + msg.substring(0,200);
-      console.error('[rpcLunchPurchase] echec:', msg);
-      console.error('[rpcLunchPurchase] params:', { user: lunchSession.profile.id, dep: lunchSelectedPerson.depId, slot: slotDbId, machine: MACHINE_ID, amount: price });
-      showSuccess('✗ ' + friendly, '#' + slotId + ' — ' + zoneName);
+    const bal = await fetchUserBalance(lunchSession.profile.id, lunchSelectedPerson.depId);
+    if(bal === null) {
+      showSuccess('✗ Solde indisponible — reessayez', '#' + slotId + ' — ' + zoneName);
+      return;
+    }
+    if(bal < price) {
+      showSuccess('✗ Solde insuffisant', bal.toFixed(2) + ' $ / ' + price.toFixed(2) + ' $ requis');
       return;
     }
   }
@@ -3249,14 +3237,22 @@ async function confirmReservation() {
   renderMachineSlots();
 
   window.gantryQueue = window.gantryQueue || [];
-  window.gantryQueue.push({ slotId: slotId, xFrac: xFrac, zone: zoneId, desc: slotDesc, price: price });
+  // On embarque les infos de paiement dans le job pour que confirmPickup()
+  // puisse appeler la RPC lunch_purchase au moment ou l'usager recupere le plat.
+  window.gantryQueue.push({
+    slotId: slotId,
+    xFrac: xFrac,
+    zone: zoneId,
+    desc: slotDesc,
+    price: price,
+    userId:   lunchSession?.profile?.id || null,
+    depId:    lunchSelectedPerson?.depId || null,
+    slotDbId: slotDbId,
+    buyerName: buyer,
+    zoneName: zoneName
+  });
 
   showSuccess(t('successMsg', buyer), '#' + slotId + ' — ' + zoneName + ' — ' + priceStr);
-
-  // Rafraichir le solde affiche dans l'entete. Sert aussi de diagnostic :
-  // si le solde ne change pas apres un achat reussi, c'est que la RPC a
-  // retourne sans debiter (probleme de policy, signature, ou DB cible).
-  if(price > 0) refreshHeaderBalance();
 }
 
 function showSuccess(msg, sub) {
@@ -4661,12 +4657,41 @@ window.gantryWaitingPickup = false;
     window.gantryQueue.push({ slotId: slotId, xFrac: xf });
   };
 
-  window.confirmPickup = function() {
+  window.confirmPickup = async function() {
     var empty  = document.getElementById('pickup-col-empty');
     var active = document.getElementById('pickup-col-active');
     if(active) active.style.display = 'none';
     if(empty)  empty.style.display  = 'flex';
     window.gantryWaitingPickup = false;
+
+    // NOUVEAU : le debit reel se fait ici, au moment ou l'usager confirme avoir
+    // pris le plat en zone de cueillette. Si cancelPickup est appele a la place,
+    // cette fonction n'est jamais executee et aucun debit n'a lieu.
+    var job = G.currentJob;
+    if(job && NET_MODE && job.price > 0 && job.userId) {
+      try {
+        var txId = await rpcLunchPurchase({
+          userId:   job.userId,
+          depId:    job.depId,
+          slotDbId: job.slotDbId,
+          buyerName: job.buyerName || '',
+          price:    job.price
+        });
+        console.log('[confirmPickup] debit OK | tx=', txId, '| user=', job.userId, 'dep=', job.depId, 'amount=', job.price);
+        refreshHeaderBalance();
+      } catch(err) {
+        // Le plat est physiquement en main de l'usager a ce stade. On log
+        // tres fort pour que l'admin puisse corriger manuellement plus tard,
+        // mais on ne retient pas le plat.
+        var msg = (err && err.message) ? err.message : String(err);
+        console.error('[confirmPickup] ECHEC DEBIT APRES LIVRAISON — intervention admin necessaire:', msg);
+        console.error('[confirmPickup] job:', job);
+        if(typeof showSuccess === 'function') {
+          showSuccess('⚠ Debit echoue — voir admin', msg.substring(0,80));
+        }
+      }
+    }
+
     // Le currentJob est conservé jusqu'à ce que le robot soit parké
     // La phase waitPickup détecte gantryWaitingPickup=false et passe à toPark
   };
