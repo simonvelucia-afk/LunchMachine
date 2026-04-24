@@ -1875,6 +1875,14 @@ setInterval(tickTemperatures, 4000);
 const SB_URL  = 'https://bpxscgrbxjscicpnheep.supabase.co';
 const SB_ANON = 'sb_publishable_2V-eHOvw1v_Xwr1bpHfHLg_cbHW9ctD';
 
+// Edge Function finance-bridge : passerelle vers la centrale Modulimo.
+// Sert a migrer les soldes/achats de la DB CoHabitat de l'immeuble vers la
+// centrale quand system_settings.finance_central_enabled = 'true' cote immeuble.
+const FINANCE_BRIDGE_URL = SB_URL + '/functions/v1/finance-bridge';
+// Lu depuis system_settings.finance_central_enabled au login (cote CoHabitat
+// de l'immeuble, pas cote central). Chaque immeuble bascule independamment.
+let _financeCentralEnabled = false;
+
 // Détecte ?machine=xxx dans l'URL
 const MACHINE_ID = new URLSearchParams(location.search).get('machine') || null;
 const NET_MODE   = !!MACHINE_ID;
@@ -2023,12 +2031,53 @@ async function saveZoneToSupabase(zoneKey) {
 }
 
 // Appelle la RPC atomique lunch_purchase : verifie le solde, insere la tx, debite.
-// p_user_id  : uuid du resident (toujours celui qui est loggue)
-// p_dep_id   : uuid du dependant si l'achat est fait pour lui (sinon null)
-// p_slot_db_id : uuid de la ligne lunch_slots (slot._db_id)
-// Retourne l'uuid de la tx creee, ou throw en cas d'echec (solde insuffisant, etc).
-async function rpcLunchPurchase({ userId, depId, slotDbId, buyerName, price }) {
+// userId        : uuid du resident (toujours celui qui est loggue)
+// depId         : uuid du dependant si l'achat est fait pour lui (sinon null)
+// slotDbId      : uuid de la ligne lunch_slots (slot._db_id)
+// idempotencyKey: cle stable cote client pour rejouer sans double-debit.
+//                 Obligatoire quand _financeCentralEnabled (la RPC centrale
+//                 refuse les achats sans cle). Ignoree cote local.
+// Retourne { transaction_id, virtual_balance } ou throw en cas d'echec.
+async function rpcLunchPurchase({ userId, depId, slotDbId, buyerName, price, idempotencyKey }) {
   if(!NET_MODE) throw new Error('Hors-ligne');
+
+  // Bascule : si le flag est actif et qu'on a une session user, on passe par
+  // la centrale via finance-bridge. Sinon on garde la RPC locale CoHabitat.
+  if(_financeCentralEnabled && lunchSession && lunchSession.token) {
+    if(!idempotencyKey) throw new Error('idempotency_key manquant (requis par finance-bridge)');
+    const res = await fetch(FINANCE_BRIDGE_URL + '/lunch-purchase', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + lunchSession.token,
+        'apikey': SB_ANON,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        machine_id: MACHINE_ID,
+        amount: Number(price) || 0,
+        idempotency_key: idempotencyKey,
+        dependent_id: depId || null,
+        slot_id: slotDbId == null ? null : String(slotDbId),
+        buyer_name: buyerName || ''
+      })
+    });
+    if(!res.ok) {
+      const txt = await res.text();
+      // 402 = INSUFFICIENT_FUNDS, 409 = IDEMPOTENCY_KEY_COLLISION, etc.
+      // On remonte le status pour que l'appelant puisse discriminer si besoin.
+      const err = new Error(txt || ('finance-bridge ' + res.status));
+      err.status = res.status;
+      throw err;
+    }
+    const data = await res.json();
+    // _lastBalance est mis a jour opportunistiquement avec la valeur post-debit
+    // retournee par la RPC centrale (evite un get-balance supplementaire).
+    if(typeof data.virtual_balance === 'number' && !depId) {
+      _lastBalance = data.virtual_balance;
+    }
+    return data.transaction_id;
+  }
+
   const res = await fetch(CH_URL + '/rest/v1/rpc/lunch_purchase', {
     method: 'POST',
     headers: {
@@ -2055,8 +2104,11 @@ async function rpcLunchPurchase({ userId, depId, slotDbId, buyerName, price }) {
   return await res.json();
 }
 
-// Recupere le solde virtuel courant depuis CoHabitat. Si depId est fourni,
-// retourne le solde du dependant ; sinon celui du resident principal.
+// Recupere le solde virtuel courant. Si depId est fourni, retourne le solde
+// du dependant ; sinon celui du resident principal.
+// Source :
+//   - _financeCentralEnabled + session user  -> central via finance-bridge
+//   - sinon                                  -> RPC CoHabitat lunch_get_balance
 // Retourne null si offline, profile manquant, ou erreur reseau (l'UI doit
 // alors afficher "—" pour rester sobre plutot que "0$" qui serait trompeur).
 async function fetchUserBalance(userId, depId) {
@@ -2064,6 +2116,32 @@ async function fetchUserBalance(userId, depId) {
     console.log('[fetchUserBalance] skip:', { NET_MODE: NET_MODE, userId: userId });
     return null;
   }
+
+  if(_financeCentralEnabled && lunchSession && lunchSession.token) {
+    try {
+      var res = await fetch(FINANCE_BRIDGE_URL + '/get-balance', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + lunchSession.token,
+          'apikey': SB_ANON,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ dependent_id: depId || null })
+      });
+      if(!res.ok) {
+        var txt = await res.text();
+        console.warn('[fetchUserBalance] finance-bridge ' + res.status + ':', txt.substring(0,200));
+        return null;
+      }
+      var data = await res.json();
+      var n = parseFloat(data && data.virtual_balance);
+      return isNaN(n) ? null : n;
+    } catch(err) {
+      console.warn('[fetchUserBalance] erreur reseau (central):', err.message || err);
+      return null;
+    }
+  }
+
   // On passe par la RPC SECURITY DEFINER plutot que de tenter un SELECT
   // direct sur profiles/dependents : la cle anon n'a pas le droit de lire
   // virtual_balance via RLS, et on ne veut pas ouvrir cette table a anon.
@@ -3001,6 +3079,22 @@ async function doLunchLogin() {
       {}, token
     );
 
+    // Phase 3C : lire le flag finance_central_enabled cote CoHabitat de l'immeuble.
+    // Quand 'true', fetchUserBalance et rpcLunchPurchase passent par finance-bridge
+    // (centrale Modulimo) au lieu des RPC locales. Chaque immeuble bascule
+    // independamment. Echec silencieux -> on reste sur le comportement local.
+    try {
+      const settings = await chFetch(
+        'system_settings?key=eq.finance_central_enabled&select=value&limit=1',
+        {}, token
+      );
+      _financeCentralEnabled = !!(settings && settings[0] && settings[0].value === 'true');
+      if(_financeCentralEnabled) console.info('[finance-central] enabled via system_settings');
+    } catch(e) {
+      _financeCentralEnabled = false;
+      console.warn('[finance-central] flag lookup failed, falling back to local:', e.message || e);
+    }
+
     lunchSession = { profile, dependents: deps || [], token };
     resetLunchSessionTimer();
     updateAdminBtn();
@@ -3280,6 +3374,10 @@ async function confirmReservation() {
   window.gantryQueue = window.gantryQueue || [];
   // On embarque les infos de paiement dans le job pour que confirmPickup()
   // puisse appeler la RPC lunch_purchase au moment ou l'usager recupere le plat.
+  // idempotencyKey : genere ici (= a l'instant ou le plat est commis a etre
+  // livre) et fige pour tous les retries eventuels dans confirmPickup().
+  // Stable cote client = pas de double-debit si le reseau flanche pendant
+  // le POST a finance-bridge.
   window.gantryQueue.push({
     slotId: slotId,
     xFrac: xFrac,
@@ -3290,7 +3388,8 @@ async function confirmReservation() {
     depId:    lunchSelectedPerson?.depId || null,
     slotDbId: slotDbId,
     buyerName: buyer,
-    zoneName: zoneName
+    zoneName: zoneName,
+    idempotencyKey: (crypto && crypto.randomUUID) ? crypto.randomUUID() : ('lm-' + Date.now() + '-' + Math.random().toString(36).slice(2))
   });
 
   showSuccess(t('successMsg', buyer), '#' + slotId + ' — ' + zoneName + ' — ' + priceStr);
@@ -4716,7 +4815,8 @@ window.gantryWaitingPickup = false;
           depId:    job.depId,
           slotDbId: job.slotDbId,
           buyerName: job.buyerName || '',
-          price:    job.price
+          price:    job.price,
+          idempotencyKey: job.idempotencyKey
         });
         console.log('[confirmPickup] debit OK | tx=', txId, '| user=', job.userId, 'dep=', job.depId, 'amount=', job.price);
         refreshHeaderBalance();
