@@ -1876,12 +1876,118 @@ const SB_URL  = 'https://bpxscgrbxjscicpnheep.supabase.co';
 const SB_ANON = 'sb_publishable_2V-eHOvw1v_Xwr1bpHfHLg_cbHW9ctD';
 
 // Edge Function finance-bridge : passerelle vers la centrale Modulimo.
-// Sert a migrer les soldes/achats de la DB CoHabitat de l'immeuble vers la
-// centrale quand system_settings.finance_central_enabled = 'true' cote immeuble.
+// Toutes les operations sur le solde (lecture, debit) passent par cette
+// passerelle ; il n'y a plus de chemin local.
 const FINANCE_BRIDGE_URL = SB_URL + '/functions/v1/finance-bridge';
-// Lu depuis system_settings.finance_central_enabled au login (cote CoHabitat
-// de l'immeuble, pas cote central). Chaque immeuble bascule independamment.
-let _financeCentralEnabled = false;
+
+// ─── Health probe centrale ───────────────────────────────────────────────
+// Etat global de la centrale, mis a jour par probeCentralHealth(). Sert a
+// verrouiller startPurchase / confirmReservation quand la centrale ne
+// repond pas, pour eviter qu'un usager s'engage dans un flow voue a
+// echouer (et finisse avec un plat livre sans debit). Le probe tourne
+// toutes les 60 s + au boot + sur l'evenement window 'online'.
+let _centralOnline = null;       // null tant qu'aucune reponse, true/false ensuite
+let _centralLatencyMs = null;    // derniere latence mesuree
+let _centralProbeTimer = null;
+let _centralProbeInflight = false;
+
+async function probeCentralHealth() {
+  if(!NET_MODE) { _centralOnline = false; return false; }
+  if(_centralProbeInflight) return _centralOnline === true;
+  _centralProbeInflight = true;
+  const ctrl = new AbortController();
+  const t = setTimeout(function(){ ctrl.abort(); }, 4000);
+  const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+  try {
+    const res = await fetch(FINANCE_BRIDGE_URL + '/health', {
+      method: 'GET',
+      headers: { 'apikey': SB_ANON },
+      signal: ctrl.signal
+    });
+    const ok = res.ok;
+    if(ok) {
+      try { const j = await res.json(); _centralLatencyMs = (j && typeof j.latency_ms === 'number') ? j.latency_ms : null; } catch(_) {}
+    } else {
+      _centralLatencyMs = null;
+    }
+    if(_centralOnline !== ok) {
+      console.info('[health] central ' + (ok ? 'UP' : 'DOWN ' + res.status) + ' (latency=' + _centralLatencyMs + 'ms)');
+      _centralOnline = ok;
+      renderCentralBadge();
+      updateOfflineLocks();
+    } else {
+      _centralOnline = ok;
+    }
+    return ok;
+  } catch(err) {
+    const elapsed = Math.round(((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - t0);
+    if(_centralOnline !== false) {
+      console.warn('[health] central injoignable apres ' + elapsed + 'ms:', err && err.message ? err.message : err);
+      _centralOnline = false;
+      _centralLatencyMs = null;
+      renderCentralBadge();
+      updateOfflineLocks();
+    }
+    return false;
+  } finally {
+    clearTimeout(t);
+    _centralProbeInflight = false;
+  }
+}
+
+function startCentralHealthProbe() {
+  if(!NET_MODE) return;
+  if(_centralProbeTimer) return;
+  probeCentralHealth();
+  _centralProbeTimer = setInterval(probeCentralHealth, 60000);
+  if(typeof window !== 'undefined' && window.addEventListener) {
+    window.addEventListener('online',  probeCentralHealth);
+    window.addEventListener('offline', function(){
+      if(_centralOnline !== false) {
+        _centralOnline = false; _centralLatencyMs = null;
+        renderCentralBadge(); updateOfflineLocks();
+      }
+    });
+  }
+}
+
+// Met a jour le badge net-badge avec l'etat central. Reuse l'element existant
+// pour ne pas multiplier les indicateurs dans la topbar.
+function renderCentralBadge() {
+  if(!NET_MODE) return;
+  if(_centralOnline === true)       showNetBadge('🟢 CENTRAL ' + (_centralLatencyMs!=null?_centralLatencyMs+'ms':'OK'), '#5de88c');
+  else if(_centralOnline === false) showNetBadge('🔴 CENTRAL HORS-LIGNE', '#e85047');
+  else                              showNetBadge('⏳ CENTRAL…', '#4fa3e8');
+}
+
+// Verrouille / deverrouille les controles dependants du central (achat).
+// Le bouton "Acheter" du dish-modal est le seul controle direct ; pour les
+// slots cliquables de la grille, startPurchase fait l'interception en amont
+// (toast "Centrale hors-ligne"). Le bandeau global rend l'etat visible
+// meme si l'usager n'essaie pas encore d'acheter.
+function updateOfflineLocks() {
+  const off = (_centralOnline === false);
+  const buyBtn = document.getElementById('dish-buy-btn');
+  if(buyBtn) {
+    buyBtn.disabled = off;
+    buyBtn.style.opacity = off ? '0.4' : '';
+    buyBtn.style.cursor  = off ? 'not-allowed' : '';
+    buyBtn.title = off ? 'Centrale hors-ligne — achats indisponibles' : '';
+  }
+  let banner = document.getElementById('central-offline-banner');
+  if(off) {
+    if(!banner) {
+      banner = document.createElement('div');
+      banner.id = 'central-offline-banner';
+      banner.style.cssText = 'background:#3a1818;border:1px solid #e85047;color:#ffb3a8;font-family:monospace;font-size:11px;padding:6px 10px;text-align:center;letter-spacing:.04em;';
+      banner.textContent = '🔴 CENTRALE HORS-LIGNE — Achats indisponibles. Les fonctions de controle de la machine restent actives.';
+      const home = document.getElementById('screen-home');
+      if(home && home.firstChild) home.insertBefore(banner, home.firstChild);
+    }
+  } else if(banner) {
+    banner.remove();
+  }
+}
 
 // Détecte ?machine=xxx dans l'URL
 const MACHINE_ID = new URLSearchParams(location.search).get('machine') || null;
@@ -1968,13 +2074,15 @@ async function loadFromSupabase() {
     const lbl = document.getElementById('tth-main');
     if(lbl) lbl.textContent = machine.name;
 
-    showNetBadge('🟢 RÉSEAU', '#5de88c');
+    // Le badge net-badge est desormais pilote par le health probe central
+    // (renderCentralBadge), pas par la fin du fetch initial — le statut
+    // central est plus pertinent pour decider si l'usager peut acheter.
     renderAll();
     loadMenusFromSupabase(); // non-bloquant : menus partages entre kiosques
   } catch(err) {
     console.error('Supabase load error:', err);
-    showNetBadge('🔴 HORS-LIGNE', '#e85047');
-    // Fallback localStorage
+    // Fallback localStorage : le badge sera mis a jour au prochain probe
+    // (probablement DOWN puisque le fetch initial a rate).
     state = loadStateLocal();
     renderAll();
   }
@@ -2030,146 +2138,93 @@ async function saveZoneToSupabase(zoneKey) {
   } catch(err) { console.error('saveZone error:', err); }
 }
 
-// Appelle la RPC atomique lunch_purchase : verifie le solde, insere la tx, debite.
+// Debit atomique via finance-bridge (centrale). Le solde vit exclusivement
+// sur central depuis la migration finance ; il n'y a plus de chemin local.
+// Sans NET_MODE ou sans JWT de session, l'achat est impossible : la machine
+// n'expose alors que ses fonctions de controle (remplissage, vidage, etc.).
+//
 // userId        : uuid du resident (toujours celui qui est loggue)
 // depId         : uuid du dependant si l'achat est fait pour lui (sinon null)
 // slotDbId      : uuid de la ligne lunch_slots (slot._db_id)
 // idempotencyKey: cle stable cote client pour rejouer sans double-debit.
-//                 Obligatoire quand _financeCentralEnabled (la RPC centrale
-//                 refuse les achats sans cle). Ignoree cote local.
-// Retourne { transaction_id, virtual_balance } ou throw en cas d'echec.
+//                 Obligatoire (la RPC centrale refuse les achats sans cle).
+// Retourne le transaction_id ou throw en cas d'echec.
 async function rpcLunchPurchase({ userId, depId, slotDbId, buyerName, price, idempotencyKey }) {
-  if(!NET_MODE) throw new Error('Hors-ligne');
+  if(!NET_MODE) throw new Error('Hors-ligne — achats indisponibles');
+  if(!lunchSession || !lunchSession.token) {
+    throw new Error('Session requise — central inaccessible sans JWT');
+  }
+  if(!idempotencyKey) throw new Error('idempotency_key manquant (requis par finance-bridge)');
 
-  // Bascule : si le flag est actif et qu'on a une session user, on passe par
-  // la centrale via finance-bridge. Sinon on garde la RPC locale CoHabitat.
-  if(_financeCentralEnabled && lunchSession && lunchSession.token) {
-    if(!idempotencyKey) throw new Error('idempotency_key manquant (requis par finance-bridge)');
-    const res = await fetch(FINANCE_BRIDGE_URL + '/lunch-purchase', {
+  const res = await fetch(FINANCE_BRIDGE_URL + '/lunch-purchase', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer ' + lunchSession.token,
+      'apikey': SB_ANON,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      machine_id: MACHINE_ID,
+      amount: Number(price) || 0,
+      idempotency_key: idempotencyKey,
+      dependent_id: depId || null,
+      slot_id: slotDbId == null ? null : String(slotDbId),
+      buyer_name: buyerName || ''
+    })
+  });
+  if(!res.ok) {
+    const txt = await res.text();
+    // 402 = INSUFFICIENT_FUNDS, 409 = IDEMPOTENCY_KEY_COLLISION, etc.
+    // On remonte le status pour que l'appelant puisse discriminer si besoin.
+    const err = new Error(txt || ('finance-bridge ' + res.status));
+    err.status = res.status;
+    throw err;
+  }
+  const data = await res.json();
+  // _lastBalance est mis a jour opportunistiquement avec la valeur post-debit
+  // retournee par la RPC centrale (evite un get-balance supplementaire).
+  if(typeof data.virtual_balance === 'number' && !depId) {
+    _lastBalance = data.virtual_balance;
+  }
+  return data.transaction_id;
+}
+
+// Recupere le solde virtuel courant via la centrale (finance-bridge).
+// Le solde vit exclusivement sur central depuis la migration finance ;
+// il n'y a plus de fallback local. Sans connexion ou sans JWT de session,
+// les achats sont impossibles (cf. startPurchase / confirmReservation).
+// Retourne null si offline, profile manquant, pas de session, ou erreur
+// reseau (l'UI affiche alors "—" plutot que "0$" qui serait trompeur).
+async function fetchUserBalance(userId, depId) {
+  if(!NET_MODE || !userId) {
+    console.log('[fetchUserBalance] skip:', { NET_MODE: NET_MODE, userId: userId });
+    return null;
+  }
+  if(!lunchSession || !lunchSession.token) {
+    console.warn('[fetchUserBalance] pas de JWT de session — central inaccessible');
+    return null;
+  }
+
+  try {
+    var res = await fetch(FINANCE_BRIDGE_URL + '/get-balance', {
       method: 'POST',
       headers: {
         'Authorization': 'Bearer ' + lunchSession.token,
         'apikey': SB_ANON,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        machine_id: MACHINE_ID,
-        amount: Number(price) || 0,
-        idempotency_key: idempotencyKey,
-        dependent_id: depId || null,
-        slot_id: slotDbId == null ? null : String(slotDbId),
-        buyer_name: buyerName || ''
-      })
-    });
-    if(!res.ok) {
-      const txt = await res.text();
-      // 402 = INSUFFICIENT_FUNDS, 409 = IDEMPOTENCY_KEY_COLLISION, etc.
-      // On remonte le status pour que l'appelant puisse discriminer si besoin.
-      const err = new Error(txt || ('finance-bridge ' + res.status));
-      err.status = res.status;
-      throw err;
-    }
-    const data = await res.json();
-    // _lastBalance est mis a jour opportunistiquement avec la valeur post-debit
-    // retournee par la RPC centrale (evite un get-balance supplementaire).
-    if(typeof data.virtual_balance === 'number' && !depId) {
-      _lastBalance = data.virtual_balance;
-    }
-    return data.transaction_id;
-  }
-
-  const res = await fetch(CH_URL + '/rest/v1/rpc/lunch_purchase', {
-    method: 'POST',
-    headers: {
-      'apikey': CH_ANON,
-      'Authorization': 'Bearer ' + CH_ANON,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      p_user_id:   userId,
-      p_dep_id:    depId || null,
-      p_machine_id: MACHINE_ID,
-      // p_slot_db_id est typee TEXT cote SQL pour s'adapter a tout type
-      // d'ID de lunch_slots (UUID, INT, TEXT). On force String() ici pour
-      // que PostgREST recoive bien une chaine et pas un nombre.
-      p_slot_db_id: slotDbId == null ? null : String(slotDbId),
-      p_buyer_name: buyerName || '',
-      p_amount:    Number(price) || 0
-    })
-  });
-  if(!res.ok) {
-    const txt = await res.text();
-    throw new Error(txt || ('RPC ' + res.status));
-  }
-  return await res.json();
-}
-
-// Recupere le solde virtuel courant. Si depId est fourni, retourne le solde
-// du dependant ; sinon celui du resident principal.
-// Source :
-//   - _financeCentralEnabled + session user  -> central via finance-bridge
-//   - sinon                                  -> RPC CoHabitat lunch_get_balance
-// Retourne null si offline, profile manquant, ou erreur reseau (l'UI doit
-// alors afficher "—" pour rester sobre plutot que "0$" qui serait trompeur).
-async function fetchUserBalance(userId, depId) {
-  if(!NET_MODE || !userId) {
-    console.log('[fetchUserBalance] skip:', { NET_MODE: NET_MODE, userId: userId });
-    return null;
-  }
-
-  if(_financeCentralEnabled && lunchSession && lunchSession.token) {
-    try {
-      var res = await fetch(FINANCE_BRIDGE_URL + '/get-balance', {
-        method: 'POST',
-        headers: {
-          'Authorization': 'Bearer ' + lunchSession.token,
-          'apikey': SB_ANON,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ dependent_id: depId || null })
-      });
-      if(!res.ok) {
-        var txt = await res.text();
-        console.warn('[fetchUserBalance] finance-bridge ' + res.status + ':', txt.substring(0,200));
-        return null;
-      }
-      var data = await res.json();
-      var n = parseFloat(data && data.virtual_balance);
-      return isNaN(n) ? null : n;
-    } catch(err) {
-      console.warn('[fetchUserBalance] erreur reseau (central):', err.message || err);
-      return null;
-    }
-  }
-
-  // On passe par la RPC SECURITY DEFINER plutot que de tenter un SELECT
-  // direct sur profiles/dependents : la cle anon n'a pas le droit de lire
-  // virtual_balance via RLS, et on ne veut pas ouvrir cette table a anon.
-  // La RPC est definie dans CoHabitat/sql/001_lunch_coherence.sql (section D).
-  try {
-    var res = await fetch(CH_URL + '/rest/v1/rpc/lunch_get_balance', {
-      method: 'POST',
-      headers: {
-        'apikey': CH_ANON,
-        'Authorization': 'Bearer ' + CH_ANON,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ p_user_id: userId, p_dep_id: depId || null })
+      body: JSON.stringify({ dependent_id: depId || null })
     });
     if(!res.ok) {
       var txt = await res.text();
-      console.warn('[fetchUserBalance] RPC ' + res.status + ':', txt.substring(0,200));
+      console.warn('[fetchUserBalance] finance-bridge ' + res.status + ':', txt.substring(0,200));
       return null;
     }
-    var v = await res.json();
-    if(v === null || v === undefined) {
-      console.warn('[fetchUserBalance] RPC a renvoye null pour', depId ? 'dep='+depId : 'user='+userId);
-      return null;
-    }
-    var n = parseFloat(v);
+    var data = await res.json();
+    var n = parseFloat(data && data.virtual_balance);
     return isNaN(n) ? null : n;
   } catch(err) {
-    console.warn('[fetchUserBalance] erreur reseau:', err.message || err);
+    console.warn('[fetchUserBalance] erreur reseau (central):', err.message || err);
     return null;
   }
 }
@@ -2724,6 +2779,10 @@ function openSlot(id) {
   buyBtn.textContent = 'Acheter — ' + priceStr + ' ›';
   buyBtn.onclick = function(){ closeDishModal(); startPurchase(id); };
 
+  // Reflete l'etat central courant sur le bouton (le bouton est statique
+  // donc reutilise entre ouvertures, son disabled doit etre re-applique).
+  if(typeof updateOfflineLocks === 'function') updateOfflineLocks();
+
   document.getElementById('dish-modal').classList.add('active');
 }
 
@@ -2956,13 +3015,11 @@ function showDoneOverlay() {
 }
 // ═══════════════════════════════
 // Deux bases Supabase :
-//   - SB_URL (central)   : lunch_machines, lunch_zones, lunch_slots, lunch_menus
+//   - SB_URL (central)   : lunch_machines, lunch_zones, lunch_slots, lunch_menus,
+//                           ledger financier (balances, transactions). Toute
+//                           operation sur le solde passe par finance-bridge.
 //   - COHAB_URL (immeuble): profiles, dependents, lunch_queue, lunch_sessions,
-//                           lunch_transactions, RPC lunch_purchase.
-// CH_URL pointe vers l'immeuble car c'est la que vivent les soldes et le
-// ledger financier. Precedemment pointait vers le central par erreur, ce qui
-// faisait que lunch_purchase ne trouvait pas les profils et que les soldes
-// n'etaient jamais debites.
+//                           lunch_transactions (trace locale uniquement).
 const COHAB_URL  = 'https://uwyhrdjlwetcbtskijrs.supabase.co';
 const COHAB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV3eWhyZGpsd2V0Y2J0c2tpanJzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1NzMxNjYsImV4cCI6MjA4ODE0OTE2Nn0.NHo_RY4DjTmtkFcjOJ3dFPzNRN1rCwBCDXyIixOSrn4';
 
@@ -3078,22 +3135,6 @@ async function doLunchLogin() {
       'dependents?parent_id=eq.' + userId + '&allow_lunch=eq.true&select=id,name,age&order=name',
       {}, token
     );
-
-    // Phase 3C : lire le flag finance_central_enabled cote CoHabitat de l'immeuble.
-    // Quand 'true', fetchUserBalance et rpcLunchPurchase passent par finance-bridge
-    // (centrale Modulimo) au lieu des RPC locales. Chaque immeuble bascule
-    // independamment. Echec silencieux -> on reste sur le comportement local.
-    try {
-      const settings = await chFetch(
-        'system_settings?key=eq.finance_central_enabled&select=value&limit=1',
-        {}, token
-      );
-      _financeCentralEnabled = !!(settings && settings[0] && settings[0].value === 'true');
-      if(_financeCentralEnabled) console.info('[finance-central] enabled via system_settings');
-    } catch(e) {
-      _financeCentralEnabled = false;
-      console.warn('[finance-central] flag lookup failed, falling back to local:', e.message || e);
-    }
 
     lunchSession = { profile, dependents: deps || [], token };
     resetLunchSessionTimer();
@@ -3257,6 +3298,20 @@ function authBackToSelect() {
 let nameBuffer = '';
 
 function startPurchase(id) {
+  // Le solde vit sur la centrale Modulimo : sans connexion, aucun achat
+  // possible. La machine reste utilisable pour ses fonctions de controle
+  // locales (remplissage, vidage, calibration), mais pas pour vendre.
+  if(!NET_MODE) {
+    showSuccess('Hors-ligne — achats indisponibles', 'Solde gere par la centrale');
+    return;
+  }
+  // Health probe : si la centrale ne repond pas, on refuse net plutot que
+  // de laisser l'usager tomber sur une erreur 4 etapes plus tard.
+  if(_centralOnline === false) {
+    showSuccess('Centrale hors-ligne', 'Achats indisponibles — reessayez sous peu');
+    probeCentralHealth(); // re-probe immediat au cas ou la connexion est revenue
+    return;
+  }
   // Bloquer les transactions en mode démo
   if(lunchSession && lunchSession.profile.role === 'demo') {
     showSuccess('Mode démo — transaction désactivée', 'Compte de démonstration');
@@ -3337,10 +3392,24 @@ async function confirmReservation() {
   // que l'usager a pousse "J'AI PRIS". Si l'usager annule (cancelPickup), le
   // plateau est remis en place et aucun debit ne survient.
   //
-  // On fait quand meme un pre-check du solde ici pour ne pas laisser le robot
-  // aller chercher un plat si la personne n'a pas les fonds. lunch_get_balance
-  // est SECURITY DEFINER, contourne les RLS sur profiles/dependents.
-  if(NET_MODE && price > 0 && lunchSession?.profile?.id) {
+  // Pre-check du solde via la centrale pour ne pas laisser le robot aller
+  // chercher un plat si la personne n'a pas les fonds. Aucun chemin local :
+  // sans NET_MODE ou sans JWT de session, l'achat paye est refuse net (la
+  // machine garde ses fonctions de controle, mais ne vend pas).
+  if(price > 0) {
+    if(!NET_MODE) {
+      showSuccess('Hors-ligne — achats indisponibles', 'Solde gere par la centrale');
+      return;
+    }
+    if(_centralOnline === false) {
+      showSuccess('Centrale hors-ligne', 'Reessayez sous peu');
+      probeCentralHealth();
+      return;
+    }
+    if(!lunchSession?.token || !lunchSession?.profile?.id) {
+      showSuccess('Session requise', 'Reconnectez-vous pour debiter via la centrale');
+      return;
+    }
     const bal = await fetchUserBalance(lunchSession.profile.id, lunchSelectedPerson.depId);
     if(bal === null) {
       showSuccess('✗ Solde indisponible — reessayez', '#' + slotId + ' — ' + zoneName);
@@ -3373,7 +3442,7 @@ async function confirmReservation() {
 
   window.gantryQueue = window.gantryQueue || [];
   // On embarque les infos de paiement dans le job pour que confirmPickup()
-  // puisse appeler la RPC lunch_purchase au moment ou l'usager recupere le plat.
+  // puisse debiter via finance-bridge au moment ou l'usager recupere le plat.
   // idempotencyKey : genere ici (= a l'instant ou le plat est commis a etre
   // livre) et fige pour tous les retries eventuels dans confirmPickup().
   // Stable cote client = pas de double-debit si le reseau flanche pendant
@@ -4639,12 +4708,11 @@ updateAdminBtn();
 // ─── Auto-login via token passé dans l'URL depuis CoHabitat ──────────────────
 // URL format: ?machine=xxx&chsession=SESSION_ID
 //
-// Phase 3D : la row lunch_sessions transporte aussi access_token et
-// finance_central_enabled (cf CoHabitat sql/003), pour que le kiosque puisse
-// debiter directement la centrale via finance-bridge au lieu de la RPC locale
-// lunch_purchase. Sans ces deux champs, _financeCentralEnabled reste false
-// et lunchSession.token est null, donc rpcLunchPurchase tombe systematique-
-// ment sur le chemin local : central jamais debite, divergence permanente.
+// La row lunch_sessions transporte access_token (JWT du resident, signe par
+// l'Auth Supabase de l'immeuble). Sans ce token, le kiosque ne peut pas
+// debiter via finance-bridge — donc aucun achat possible (le solde vit
+// exclusivement sur la centrale Modulimo). Le flag finance_central_enabled
+// est conserve pour la trace mais n'est plus une condition d'activation.
 (async function() {
   const params    = new URLSearchParams(location.search);
   const sessionId = params.get('chsession');
@@ -4704,16 +4772,13 @@ updateAdminBtn();
       } catch(e) { console.warn('[chsession] deps load failed:', e.message || e); }
     }
 
-    // Bascule centrale : si CoHabitat a le flag actif ET nous a transmis un
-    // token, on active le chemin finance-bridge pour les achats et lectures
-    // de solde du kiosque. Sans token, on reste forcement sur la RPC locale
-    // (finance-bridge refuse les appels sans Bearer).
-    _financeCentralEnabled = centralFlag && !!accessToken;
-    if(_financeCentralEnabled) console.info('[finance-central] enabled via chsession handoff');
-    else if(centralFlag && !accessToken) console.warn('[finance-central] flag actif cote CoHabitat mais aucun token relayé — fallback local');
+    // Le solde vit exclusivement sur la centrale ; sans token relaye par
+    // CoHabitat, le kiosque ne peut pas debiter et refusera les achats
+    // (la machine garde uniquement ses fonctions de controle locales).
+    if(!accessToken) console.warn('[chsession] aucun token relaye — achats indisponibles');
 
     lunchSession = { profile, dependents: deps, token: accessToken };
-    console.log('[chsession] ✓ session créée pour:', profile.full_name, '| role:', profile.role, '| central:', _financeCentralEnabled);
+    console.log('[chsession] ✓ session créée pour:', profile.full_name, '| role:', profile.role, '| token:', accessToken ? 'yes' : 'no');
     resetLunchSessionTimer();
     updateAdminBtn();
     queueRender();
@@ -4749,10 +4814,14 @@ window.addEventListener('beforeunload', _kioskCleanupOnUnload);
 // beforeunload est parfois ignore.
 window.addEventListener('pagehide', _kioskCleanupOnUnload);
 
-// Mode réseau : charger depuis Supabase
+// Mode réseau : charger depuis Supabase + demarrer le probe central
 if(NET_MODE) {
   showNetBadge('⏳ CONNEXION…', '#4fa3e8');
   loadFromSupabase();
+  // Demarre le probe central (poll 60s + reaction online/offline). Le probe
+  // controle l'affichage du badge net-badge en mode reseau et grise les
+  // boutons d'achat quand la centrale ne repond pas.
+  startCentralHealthProbe();
 } else {
   showNetBadge('💾 LOCAL', '#888');
 }
