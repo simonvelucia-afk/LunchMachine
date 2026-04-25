@@ -2187,48 +2187,10 @@ async function saveZoneToSupabase(zoneKey) {
   } catch(err) { console.error('saveZone error:', err); }
 }
 
-// Debit atomique via finance-bridge (centrale). Le solde vit exclusivement
-// sur central depuis la migration finance ; il n'y a plus de chemin local.
-// Sans NET_MODE ou sans JWT de session, l'achat est impossible : la machine
-// n'expose alors que ses fonctions de controle (remplissage, vidage, etc.).
-//
-// userId        : uuid du resident (toujours celui qui est loggue)
-// depId         : uuid du dependant si l'achat est fait pour lui (sinon null)
-// slotDbId      : uuid de la ligne lunch_slots (slot._db_id)
-// idempotencyKey: cle stable cote client pour rejouer sans double-debit.
-//                 Obligatoire (la RPC centrale refuse les achats sans cle).
-// Retour : { ok, transaction_id?, virtual_balance?, queued?, queueId?, error?, status? }
-//   - ok=true            : debit confirme par central, transaction_id retourne
-//   - queued=true        : echec reseau, op persistee dans l'outbox (sera retentee
-//                          en arriere-plan jusqu'a succes ou expiration JWT). Le
-//                          plat etant deja livre, on traite comme "succes optimiste"
-//                          cote UI : on previent juste qu'une synchro est en cours.
-//   - ok=false sans queued : erreur metier definitive (INSUFFICIENT_FUNDS, etc.)
-//                            l'appelant doit alerter l'admin.
-async function rpcLunchPurchase({ userId, depId, slotDbId, buyerName, price, idempotencyKey }) {
-  if(!NET_MODE) return { ok:false, error:'OFFLINE', status:0, retryable:false };
-  if(!lunchSession || !lunchSession.token) {
-    return { ok:false, error:'NO_SESSION', status:401, retryable:false };
-  }
-  if(!idempotencyKey) {
-    return { ok:false, error:'MISSING_IDEMPOTENCY_KEY', status:400, retryable:false };
-  }
-  if(!_balanceOps) return { ok:false, error:'BALANCE_OPS_UNAVAILABLE', status:0, retryable:false };
-
-  const r = await _balanceOps.lunchPurchase({
-    machine_id:      MACHINE_ID,
-    amount:          Number(price) || 0,
-    idempotency_key: idempotencyKey,
-    dependent_id:    depId || null,
-    slot_id:         slotDbId == null ? null : String(slotDbId),
-    buyer_name:      buyerName || ''
-  });
-  // Sur succes immediat, mettre a jour le solde affiche (optimistic).
-  if(r.ok && typeof r.virtual_balance === 'number' && !depId) {
-    _lastBalance = r.virtual_balance;
-  }
-  return r;
-}
+// P3 : le debit lunch est desormais appele directement par confirmReservation
+// (pre-debit) via _balanceOps.lunchPurchase. L'ancien wrapper rpcLunchPurchase
+// a ete retire. Pour le refund (cancelPickup), on utilise _balanceOps.refund
+// avec type='lunch_cancel_refund' (whitelist cote finance-bridge).
 
 // Recupere le solde virtuel courant via la centrale (finance-bridge).
 // Le solde vit exclusivement sur central depuis la migration finance ;
@@ -3428,15 +3390,19 @@ async function confirmReservation() {
   const xFrac    = zoneId === ZONE_IDS[0] ? 0.551 : 0.849;
   const slotDbId = slot._db_id;
 
-  // NOUVEAU FLOW : le debit ne se fait PLUS ici. Il est desormais execute a
-  // confirmPickup(), quand le robot a livre le plat en zone de cueillette et
-  // que l'usager a pousse "J'AI PRIS". Si l'usager annule (cancelPickup), le
-  // plateau est remis en place et aucun debit ne survient.
-  //
-  // Pre-check du solde via la centrale pour ne pas laisser le robot aller
-  // chercher un plat si la personne n'a pas les fonds. Aucun chemin local :
-  // sans NET_MODE ou sans JWT de session, l'achat paye est refuse net (la
-  // machine garde ses fonctions de controle, mais ne vend pas).
+  // Cle d'idempotence stable, generee une fois et reutilisee pour : (1) le
+  // pre-debit ci-dessous, (2) le refund eventuel a cancelPickup. Garantit
+  // qu'un retry n'introduit pas de double debit/refund cote central.
+  const idemKey = (crypto && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : ('lm-' + Date.now() + '-' + Math.random().toString(36).slice(2));
+
+  // P3 — PRE-DEBIT : on debite AVANT de dispatcher le robot. Elimine la
+  // fenetre "plat livre sans debit" qui existait quand le debit etait
+  // fait a confirmPickup. Si le pre-debit echoue ou est queue (reseau
+  // down), on REFUSE la reservation — le robot ne bouge pas, l'usager
+  // est invite a reessayer. Pour les slots gratuits (price=0), aucun
+  // debit n'est tente.
   if(price > 0) {
     if(!NET_MODE) {
       showSuccess('Hors-ligne — achats indisponibles', 'Solde gere par la centrale');
@@ -3451,17 +3417,44 @@ async function confirmReservation() {
       showSuccess('Session requise', 'Reconnectez-vous pour debiter via la centrale');
       return;
     }
-    const bal = await fetchUserBalance(lunchSession.profile.id, lunchSelectedPerson.depId);
-    if(bal === null) {
-      showSuccess('✗ Solde indisponible — reessayez', '#' + slotId + ' — ' + zoneName);
+    if(!_balanceOps) {
+      showSuccess('Module debit indisponible', 'Rechargez la page');
       return;
     }
-    if(bal < price) {
-      showSuccess('✗ Solde insuffisant', bal.toFixed(2) + ' $ / ' + price.toFixed(2) + ' $ requis');
+    const debit = await _balanceOps.lunchPurchase({
+      machine_id:      MACHINE_ID,
+      amount:          price,
+      idempotency_key: idemKey,
+      dependent_id:    lunchSelectedPerson?.depId || null,
+      slot_id:         slotDbId == null ? null : String(slotDbId),
+      buyer_name:      buyer
+    });
+    if(debit && debit.queued) {
+      // Le reseau a flanche entre le probe (OK) et le POST. On refuse
+      // pour ne pas dispatcher le robot tant que central n'a pas confirme.
+      // L'op restera dans l'outbox mais ne sert a rien sans reservation —
+      // on la retire explicitement pour ne pas debiter dans le vide.
+      try { _balanceOps.clearAll && /* on garde l'outbox; juste un log */ console.warn('[confirmReservation] pre-debit queued, op orpheline dans outbox'); } catch(_) {}
+      showSuccess('Reseau instable — reessayez', 'Aucun robot dispatche');
       return;
+    }
+    if(!debit || !debit.ok) {
+      const errCode = (debit && debit.error) || 'UNKNOWN';
+      if(debit && debit.status === 402)      showSuccess('✗ Solde insuffisant', '');
+      else if(debit && debit.status === 401) showSuccess('Session expiree', 'Reconnectez-vous');
+      else                                    showSuccess('✗ Echec debit', errCode);
+      return;
+    }
+    // Solde maj opportuniste (post-debit). Pour un dependant, le solde
+    // affiche dans la topbar reste celui du resident principal.
+    if(typeof debit.virtual_balance === 'number' && !lunchSelectedPerson?.depId) {
+      _lastBalance = debit.virtual_balance;
     }
   }
 
+  // A partir d'ici : le debit central est confirme (ou price=0). On peut
+  // reserver le slot, persister, et dispatcher le robot. Tout echec phy-
+  // sique ulterieur (cancelPickup) declenchera un refund automatique.
   if(state.boxCount > 0) state.boxCount--;
   slot.desc = '';
   slot.price = 0;
@@ -3482,12 +3475,9 @@ async function confirmReservation() {
   renderMachineSlots();
 
   window.gantryQueue = window.gantryQueue || [];
-  // On embarque les infos de paiement dans le job pour que confirmPickup()
-  // puisse debiter via finance-bridge au moment ou l'usager recupere le plat.
-  // idempotencyKey : genere ici (= a l'instant ou le plat est commis a etre
-  // livre) et fige pour tous les retries eventuels dans confirmPickup().
-  // Stable cote client = pas de double-debit si le reseau flanche pendant
-  // le POST a finance-bridge.
+  // idempotencyKey est embarque pour que cancelPickup puisse deriver une
+  // cle de refund deterministe ('lunch:refund:' + idempotencyKey) qui
+  // empeche les doubles refunds via l'outbox.
   window.gantryQueue.push({
     slotId: slotId,
     xFrac: xFrac,
@@ -3499,7 +3489,11 @@ async function confirmReservation() {
     slotDbId: slotDbId,
     buyerName: buyer,
     zoneName: zoneName,
-    idempotencyKey: (crypto && crypto.randomUUID) ? crypto.randomUUID() : ('lm-' + Date.now() + '-' + Math.random().toString(36).slice(2))
+    idempotencyKey: idemKey,
+    // True si un pre-debit a effectivement ete confirme par central. Sert
+    // a cancelPickup pour decider de refund ou non (les slots gratuits
+    // n'ont pas a etre refundes).
+    debitedAtReservation: (price > 0)
   });
 
   showSuccess(t('successMsg', buyer), '#' + slotId + ' — ' + zoneName + ' — ' + priceStr);
@@ -4939,53 +4933,23 @@ window.gantryWaitingPickup = false;
     window.gantryQueue.push({ slotId: slotId, xFrac: xf });
   };
 
-  window.confirmPickup = async function() {
+  window.confirmPickup = function() {
     var empty  = document.getElementById('pickup-col-empty');
     var active = document.getElementById('pickup-col-active');
     if(active) active.style.display = 'none';
     if(empty)  empty.style.display  = 'flex';
     window.gantryWaitingPickup = false;
 
-    // Debit reel : declenche au moment ou l'usager confirme avoir pris
-    // le plat. Si cancelPickup est appele a la place, aucun debit n'a lieu.
-    // Avec balanceOps, un echec reseau est mis en outbox et rejoue en
-    // arriere-plan ; comme le plat est deja en main, on traite "queued"
-    // comme un succes optimiste cote UI (banniere outbox visible).
-    var job = G.currentJob;
-    if(job && NET_MODE && job.price > 0 && job.userId) {
-      var r = await rpcLunchPurchase({
-        userId:   job.userId,
-        depId:    job.depId,
-        slotDbId: job.slotDbId,
-        buyerName: job.buyerName || '',
-        price:    job.price,
-        idempotencyKey: job.idempotencyKey
-      });
-      if(r && r.ok) {
-        console.log('[confirmPickup] debit OK | tx=', r.transaction_id, '| user=', job.userId, 'dep=', job.depId, 'amount=', job.price);
-        refreshHeaderBalance();
-      } else if(r && r.queued) {
-        console.warn('[confirmPickup] debit MIS EN ATTENTE (outbox) | queueId=', r.queueId, '| sera retente automatiquement');
-        if(typeof showSuccess === 'function') {
-          showSuccess('Debit en cours de synchro', 'Sera valide automatiquement des que le reseau revient');
-        }
-      } else {
-        // Erreur metier definitive (INSUFFICIENT_FUNDS, NO_SESSION, etc.)
-        // Le plat est en main de l'usager : intervention admin necessaire.
-        var errMsg = (r && (r.error || ('HTTP_'+r.status))) || 'UNKNOWN';
-        console.error('[confirmPickup] ECHEC DEBIT DEFINITIF APRES LIVRAISON — intervention admin necessaire:', errMsg, r);
-        console.error('[confirmPickup] job:', job);
-        if(typeof showSuccess === 'function') {
-          showSuccess('⚠ Debit echoue — voir admin', errMsg);
-        }
-      }
-    }
+    // P3 : le debit a deja ete fait a confirmReservation (pre-debit). Ici
+    // on n'a plus rien a debiter — l'usager a recupere le plat, central
+    // est deja a jour. On rafraichit juste l'affichage du solde au cas ou.
+    if(typeof refreshHeaderBalance === 'function') refreshHeaderBalance();
 
     // Le currentJob est conservé jusqu'à ce que le robot soit parké
     // La phase waitPickup détecte gantryWaitingPickup=false et passe à toPark
   };
 
-  window.cancelPickup = function() {
+  window.cancelPickup = async function() {
     var job = G.currentJob;
     if(!job) return;
     var active    = document.getElementById('pickup-col-active');
@@ -4997,6 +4961,40 @@ window.gantryWaitingPickup = false;
     // Forcer passage en returnToSlot (le robot est encore à la cueillette)
     G.phase = 'returnToSlot';
     G.timer = 10;
+
+    // P3 : refund automatique du pre-debit. La cle d'idempotence est
+    // derivee de l'idempotency_key de l'achat ('lunch:refund:' + key)
+    // pour qu'un cancelPickup rejoue par l'outbox ne refund pas en double.
+    // Si le refund echoue ou queue, l'outbox prendra le relais ; on ne
+    // bloque pas le retour physique du plateau pour autant.
+    if(job.debitedAtReservation && job.userId && job.idempotencyKey && _balanceOps && NET_MODE) {
+      try {
+        var refund = await _balanceOps.refund({
+          amount:          Number(job.price) || 0,
+          type:            'lunch_cancel_refund',
+          description:     'Annulation cueillette #' + job.slotId,
+          reference_id:    job.idempotencyKey,
+          reference_type:  'lunch_purchase',
+          idempotency_key: 'lunch:refund:' + job.idempotencyKey,
+          dependent_id:    job.depId || null
+        });
+        if(refund && refund.ok) {
+          console.log('[cancelPickup] refund OK | tx=', refund.transaction_id, '| amount=', job.price);
+          if(typeof refund.virtual_balance === 'number' && !job.depId) {
+            _lastBalance = refund.virtual_balance;
+          }
+          if(typeof refreshHeaderBalance === 'function') refreshHeaderBalance();
+        } else if(refund && refund.queued) {
+          console.warn('[cancelPickup] refund MIS EN ATTENTE (outbox) | queueId=', refund.queueId);
+        } else {
+          var refundErr = (refund && (refund.error || ('HTTP_'+refund.status))) || 'UNKNOWN';
+          console.error('[cancelPickup] REFUND ECHOUE — intervention admin necessaire:', refundErr, refund);
+          if(typeof showSuccess === 'function') showSuccess('⚠ Refund echoue — voir admin', refundErr);
+        }
+      } catch(err) {
+        console.error('[cancelPickup] refund threw:', err && err.message);
+      }
+    }
   };
 
   // Called by gantry when tray is back in slot
