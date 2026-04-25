@@ -1480,6 +1480,7 @@
   </div>
 
 </div>
+<script src="balanceOps.js"></script>
 <script>
 // ═══════════════════════════════
 //  FULLSCREEN SCALING
@@ -1880,6 +1881,25 @@ const SB_ANON = 'sb_publishable_2V-eHOvw1v_Xwr1bpHfHLg_cbHW9ctD';
 // passerelle ; il n'y a plus de chemin local.
 const FINANCE_BRIDGE_URL = SB_URL + '/functions/v1/finance-bridge';
 
+// ─── balanceOps : primitive unifiee + outbox localStorage ────────────
+// Toutes les mutations de solde (lunch purchase) passent par ce module
+// pour beneficier du retry automatique en cas de coupure reseau. L'idem-
+// potency_key cote serveur garantit qu'aucun retry n'introduit de
+// double debit. Voir balanceOps.js pour le contrat de retour.
+const _balanceOps = (typeof createBalanceOps === 'function') ? createBalanceOps({
+  bridgeUrl: FINANCE_BRIDGE_URL,
+  anonKey:   SB_ANON,
+  // Le JWT est porte par lunchSession (chsession handoff ou login direct).
+  // Si pas de session, le module retourne NO_SESSION sans queue (la borne
+  // ne peut rien debiter sans auth).
+  getAuthToken: function () {
+    return (typeof lunchSession !== 'undefined' && lunchSession && lunchSession.token) ? lunchSession.token : null;
+  },
+  storageKey: 'modulimo:lunch:balanceOps:outbox:v1',
+  onChange: function (count, hasStuck) { renderOutboxBanner(count, hasStuck); },
+}) : null;
+if (!_balanceOps) console.error('[balanceOps] module non charge — verifier <script src="balanceOps.js">');
+
 // ─── Health probe centrale ───────────────────────────────────────────────
 // Etat global de la centrale, mis a jour par probeCentralHealth(). Sert a
 // verrouiller startPurchase / confirmReservation quand la centrale ne
@@ -1958,6 +1978,35 @@ function renderCentralBadge() {
   if(_centralOnline === true)       showNetBadge('🟢 CENTRAL ' + (_centralLatencyMs!=null?_centralLatencyMs+'ms':'OK'), '#5de88c');
   else if(_centralOnline === false) showNetBadge('🔴 CENTRAL HORS-LIGNE', '#e85047');
   else                              showNetBadge('⏳ CENTRAL…', '#4fa3e8');
+}
+
+// Banniere "X operations en attente" rendue par balanceOps.onChange.
+// Distincte de la banniere central-offline-banner : peut etre visible
+// meme quand le probe redevient OK (les ops persistees survivent aux
+// pannes). Inseree au-dessus du screen-home.
+function renderOutboxBanner(count, hasStuck) {
+  var existing = document.getElementById('balance-outbox-banner');
+  if(!count) { if(existing) existing.remove(); return; }
+  var bg = hasStuck ? '#3a1818' : '#3a3018';
+  var bd = hasStuck ? '#e85047' : '#e8c547';
+  var fg = hasStuck ? '#ffb3a8' : '#ffe8a8';
+  var msg = hasStuck
+    ? '⚠ ' + count + ' debit(s) bloque(s) — intervention admin requise'
+    : '⏳ ' + count + ' debit(s) en attente de synchro avec la centrale';
+  var banner = existing;
+  if(!banner) {
+    banner = document.createElement('div');
+    banner.id = 'balance-outbox-banner';
+    banner.style.cssText = 'border:1px solid;font-family:monospace;font-size:11px;padding:6px 10px;text-align:center;letter-spacing:.04em;cursor:pointer;';
+    banner.title = 'Cliquer pour forcer un retry immediat';
+    banner.onclick = function(){ if(_balanceOps) _balanceOps.retryNow(); };
+    var home = document.getElementById('screen-home');
+    if(home && home.firstChild) home.insertBefore(banner, home.firstChild);
+  }
+  banner.style.background   = bg;
+  banner.style.borderColor  = bd;
+  banner.style.color        = fg;
+  banner.textContent = msg;
 }
 
 // Verrouille / deverrouille les controles dependants du central (achat).
@@ -2148,45 +2197,37 @@ async function saveZoneToSupabase(zoneKey) {
 // slotDbId      : uuid de la ligne lunch_slots (slot._db_id)
 // idempotencyKey: cle stable cote client pour rejouer sans double-debit.
 //                 Obligatoire (la RPC centrale refuse les achats sans cle).
-// Retourne le transaction_id ou throw en cas d'echec.
+// Retour : { ok, transaction_id?, virtual_balance?, queued?, queueId?, error?, status? }
+//   - ok=true            : debit confirme par central, transaction_id retourne
+//   - queued=true        : echec reseau, op persistee dans l'outbox (sera retentee
+//                          en arriere-plan jusqu'a succes ou expiration JWT). Le
+//                          plat etant deja livre, on traite comme "succes optimiste"
+//                          cote UI : on previent juste qu'une synchro est en cours.
+//   - ok=false sans queued : erreur metier definitive (INSUFFICIENT_FUNDS, etc.)
+//                            l'appelant doit alerter l'admin.
 async function rpcLunchPurchase({ userId, depId, slotDbId, buyerName, price, idempotencyKey }) {
-  if(!NET_MODE) throw new Error('Hors-ligne — achats indisponibles');
+  if(!NET_MODE) return { ok:false, error:'OFFLINE', status:0, retryable:false };
   if(!lunchSession || !lunchSession.token) {
-    throw new Error('Session requise — central inaccessible sans JWT');
+    return { ok:false, error:'NO_SESSION', status:401, retryable:false };
   }
-  if(!idempotencyKey) throw new Error('idempotency_key manquant (requis par finance-bridge)');
+  if(!idempotencyKey) {
+    return { ok:false, error:'MISSING_IDEMPOTENCY_KEY', status:400, retryable:false };
+  }
+  if(!_balanceOps) return { ok:false, error:'BALANCE_OPS_UNAVAILABLE', status:0, retryable:false };
 
-  const res = await fetch(FINANCE_BRIDGE_URL + '/lunch-purchase', {
-    method: 'POST',
-    headers: {
-      'Authorization': 'Bearer ' + lunchSession.token,
-      'apikey': SB_ANON,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      machine_id: MACHINE_ID,
-      amount: Number(price) || 0,
-      idempotency_key: idempotencyKey,
-      dependent_id: depId || null,
-      slot_id: slotDbId == null ? null : String(slotDbId),
-      buyer_name: buyerName || ''
-    })
+  const r = await _balanceOps.lunchPurchase({
+    machine_id:      MACHINE_ID,
+    amount:          Number(price) || 0,
+    idempotency_key: idempotencyKey,
+    dependent_id:    depId || null,
+    slot_id:         slotDbId == null ? null : String(slotDbId),
+    buyer_name:      buyerName || ''
   });
-  if(!res.ok) {
-    const txt = await res.text();
-    // 402 = INSUFFICIENT_FUNDS, 409 = IDEMPOTENCY_KEY_COLLISION, etc.
-    // On remonte le status pour que l'appelant puisse discriminer si besoin.
-    const err = new Error(txt || ('finance-bridge ' + res.status));
-    err.status = res.status;
-    throw err;
+  // Sur succes immediat, mettre a jour le solde affiche (optimistic).
+  if(r.ok && typeof r.virtual_balance === 'number' && !depId) {
+    _lastBalance = r.virtual_balance;
   }
-  const data = await res.json();
-  // _lastBalance est mis a jour opportunistiquement avec la valeur post-debit
-  // retournee par la RPC centrale (evite un get-balance supplementaire).
-  if(typeof data.virtual_balance === 'number' && !depId) {
-    _lastBalance = data.virtual_balance;
-  }
-  return data.transaction_id;
+  return r;
 }
 
 // Recupere le solde virtuel courant via la centrale (finance-bridge).
@@ -4905,31 +4946,37 @@ window.gantryWaitingPickup = false;
     if(empty)  empty.style.display  = 'flex';
     window.gantryWaitingPickup = false;
 
-    // NOUVEAU : le debit reel se fait ici, au moment ou l'usager confirme avoir
-    // pris le plat en zone de cueillette. Si cancelPickup est appele a la place,
-    // cette fonction n'est jamais executee et aucun debit n'a lieu.
+    // Debit reel : declenche au moment ou l'usager confirme avoir pris
+    // le plat. Si cancelPickup est appele a la place, aucun debit n'a lieu.
+    // Avec balanceOps, un echec reseau est mis en outbox et rejoue en
+    // arriere-plan ; comme le plat est deja en main, on traite "queued"
+    // comme un succes optimiste cote UI (banniere outbox visible).
     var job = G.currentJob;
     if(job && NET_MODE && job.price > 0 && job.userId) {
-      try {
-        var txId = await rpcLunchPurchase({
-          userId:   job.userId,
-          depId:    job.depId,
-          slotDbId: job.slotDbId,
-          buyerName: job.buyerName || '',
-          price:    job.price,
-          idempotencyKey: job.idempotencyKey
-        });
-        console.log('[confirmPickup] debit OK | tx=', txId, '| user=', job.userId, 'dep=', job.depId, 'amount=', job.price);
+      var r = await rpcLunchPurchase({
+        userId:   job.userId,
+        depId:    job.depId,
+        slotDbId: job.slotDbId,
+        buyerName: job.buyerName || '',
+        price:    job.price,
+        idempotencyKey: job.idempotencyKey
+      });
+      if(r && r.ok) {
+        console.log('[confirmPickup] debit OK | tx=', r.transaction_id, '| user=', job.userId, 'dep=', job.depId, 'amount=', job.price);
         refreshHeaderBalance();
-      } catch(err) {
-        // Le plat est physiquement en main de l'usager a ce stade. On log
-        // tres fort pour que l'admin puisse corriger manuellement plus tard,
-        // mais on ne retient pas le plat.
-        var msg = (err && err.message) ? err.message : String(err);
-        console.error('[confirmPickup] ECHEC DEBIT APRES LIVRAISON — intervention admin necessaire:', msg);
+      } else if(r && r.queued) {
+        console.warn('[confirmPickup] debit MIS EN ATTENTE (outbox) | queueId=', r.queueId, '| sera retente automatiquement');
+        if(typeof showSuccess === 'function') {
+          showSuccess('Debit en cours de synchro', 'Sera valide automatiquement des que le reseau revient');
+        }
+      } else {
+        // Erreur metier definitive (INSUFFICIENT_FUNDS, NO_SESSION, etc.)
+        // Le plat est en main de l'usager : intervention admin necessaire.
+        var errMsg = (r && (r.error || ('HTTP_'+r.status))) || 'UNKNOWN';
+        console.error('[confirmPickup] ECHEC DEBIT DEFINITIF APRES LIVRAISON — intervention admin necessaire:', errMsg, r);
         console.error('[confirmPickup] job:', job);
         if(typeof showSuccess === 'function') {
-          showSuccess('⚠ Debit echoue — voir admin', msg.substring(0,80));
+          showSuccess('⚠ Debit echoue — voir admin', errMsg);
         }
       }
     }
