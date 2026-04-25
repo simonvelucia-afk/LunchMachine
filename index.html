@@ -1876,10 +1876,118 @@ const SB_URL  = 'https://bpxscgrbxjscicpnheep.supabase.co';
 const SB_ANON = 'sb_publishable_2V-eHOvw1v_Xwr1bpHfHLg_cbHW9ctD';
 
 // Edge Function finance-bridge : passerelle vers la centrale Modulimo.
-// Sert a migrer les soldes/achats de la DB CoHabitat de l'immeuble vers la
 // Toutes les operations sur le solde (lecture, debit) passent par cette
 // passerelle ; il n'y a plus de chemin local.
 const FINANCE_BRIDGE_URL = SB_URL + '/functions/v1/finance-bridge';
+
+// ─── Health probe centrale ───────────────────────────────────────────────
+// Etat global de la centrale, mis a jour par probeCentralHealth(). Sert a
+// verrouiller startPurchase / confirmReservation quand la centrale ne
+// repond pas, pour eviter qu'un usager s'engage dans un flow voue a
+// echouer (et finisse avec un plat livre sans debit). Le probe tourne
+// toutes les 60 s + au boot + sur l'evenement window 'online'.
+let _centralOnline = null;       // null tant qu'aucune reponse, true/false ensuite
+let _centralLatencyMs = null;    // derniere latence mesuree
+let _centralProbeTimer = null;
+let _centralProbeInflight = false;
+
+async function probeCentralHealth() {
+  if(!NET_MODE) { _centralOnline = false; return false; }
+  if(_centralProbeInflight) return _centralOnline === true;
+  _centralProbeInflight = true;
+  const ctrl = new AbortController();
+  const t = setTimeout(function(){ ctrl.abort(); }, 4000);
+  const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+  try {
+    const res = await fetch(FINANCE_BRIDGE_URL + '/health', {
+      method: 'GET',
+      headers: { 'apikey': SB_ANON },
+      signal: ctrl.signal
+    });
+    const ok = res.ok;
+    if(ok) {
+      try { const j = await res.json(); _centralLatencyMs = (j && typeof j.latency_ms === 'number') ? j.latency_ms : null; } catch(_) {}
+    } else {
+      _centralLatencyMs = null;
+    }
+    if(_centralOnline !== ok) {
+      console.info('[health] central ' + (ok ? 'UP' : 'DOWN ' + res.status) + ' (latency=' + _centralLatencyMs + 'ms)');
+      _centralOnline = ok;
+      renderCentralBadge();
+      updateOfflineLocks();
+    } else {
+      _centralOnline = ok;
+    }
+    return ok;
+  } catch(err) {
+    const elapsed = Math.round(((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - t0);
+    if(_centralOnline !== false) {
+      console.warn('[health] central injoignable apres ' + elapsed + 'ms:', err && err.message ? err.message : err);
+      _centralOnline = false;
+      _centralLatencyMs = null;
+      renderCentralBadge();
+      updateOfflineLocks();
+    }
+    return false;
+  } finally {
+    clearTimeout(t);
+    _centralProbeInflight = false;
+  }
+}
+
+function startCentralHealthProbe() {
+  if(!NET_MODE) return;
+  if(_centralProbeTimer) return;
+  probeCentralHealth();
+  _centralProbeTimer = setInterval(probeCentralHealth, 60000);
+  if(typeof window !== 'undefined' && window.addEventListener) {
+    window.addEventListener('online',  probeCentralHealth);
+    window.addEventListener('offline', function(){
+      if(_centralOnline !== false) {
+        _centralOnline = false; _centralLatencyMs = null;
+        renderCentralBadge(); updateOfflineLocks();
+      }
+    });
+  }
+}
+
+// Met a jour le badge net-badge avec l'etat central. Reuse l'element existant
+// pour ne pas multiplier les indicateurs dans la topbar.
+function renderCentralBadge() {
+  if(!NET_MODE) return;
+  if(_centralOnline === true)       showNetBadge('🟢 CENTRAL ' + (_centralLatencyMs!=null?_centralLatencyMs+'ms':'OK'), '#5de88c');
+  else if(_centralOnline === false) showNetBadge('🔴 CENTRAL HORS-LIGNE', '#e85047');
+  else                              showNetBadge('⏳ CENTRAL…', '#4fa3e8');
+}
+
+// Verrouille / deverrouille les controles dependants du central (achat).
+// Le bouton "Acheter" du dish-modal est le seul controle direct ; pour les
+// slots cliquables de la grille, startPurchase fait l'interception en amont
+// (toast "Centrale hors-ligne"). Le bandeau global rend l'etat visible
+// meme si l'usager n'essaie pas encore d'acheter.
+function updateOfflineLocks() {
+  const off = (_centralOnline === false);
+  const buyBtn = document.getElementById('dish-buy-btn');
+  if(buyBtn) {
+    buyBtn.disabled = off;
+    buyBtn.style.opacity = off ? '0.4' : '';
+    buyBtn.style.cursor  = off ? 'not-allowed' : '';
+    buyBtn.title = off ? 'Centrale hors-ligne — achats indisponibles' : '';
+  }
+  let banner = document.getElementById('central-offline-banner');
+  if(off) {
+    if(!banner) {
+      banner = document.createElement('div');
+      banner.id = 'central-offline-banner';
+      banner.style.cssText = 'background:#3a1818;border:1px solid #e85047;color:#ffb3a8;font-family:monospace;font-size:11px;padding:6px 10px;text-align:center;letter-spacing:.04em;';
+      banner.textContent = '🔴 CENTRALE HORS-LIGNE — Achats indisponibles. Les fonctions de controle de la machine restent actives.';
+      const home = document.getElementById('screen-home');
+      if(home && home.firstChild) home.insertBefore(banner, home.firstChild);
+    }
+  } else if(banner) {
+    banner.remove();
+  }
+}
 
 // Détecte ?machine=xxx dans l'URL
 const MACHINE_ID = new URLSearchParams(location.search).get('machine') || null;
@@ -1966,13 +2074,15 @@ async function loadFromSupabase() {
     const lbl = document.getElementById('tth-main');
     if(lbl) lbl.textContent = machine.name;
 
-    showNetBadge('🟢 RÉSEAU', '#5de88c');
+    // Le badge net-badge est desormais pilote par le health probe central
+    // (renderCentralBadge), pas par la fin du fetch initial — le statut
+    // central est plus pertinent pour decider si l'usager peut acheter.
     renderAll();
     loadMenusFromSupabase(); // non-bloquant : menus partages entre kiosques
   } catch(err) {
     console.error('Supabase load error:', err);
-    showNetBadge('🔴 HORS-LIGNE', '#e85047');
-    // Fallback localStorage
+    // Fallback localStorage : le badge sera mis a jour au prochain probe
+    // (probablement DOWN puisque le fetch initial a rate).
     state = loadStateLocal();
     renderAll();
   }
@@ -2669,6 +2779,10 @@ function openSlot(id) {
   buyBtn.textContent = 'Acheter — ' + priceStr + ' ›';
   buyBtn.onclick = function(){ closeDishModal(); startPurchase(id); };
 
+  // Reflete l'etat central courant sur le bouton (le bouton est statique
+  // donc reutilise entre ouvertures, son disabled doit etre re-applique).
+  if(typeof updateOfflineLocks === 'function') updateOfflineLocks();
+
   document.getElementById('dish-modal').classList.add('active');
 }
 
@@ -3191,6 +3305,13 @@ function startPurchase(id) {
     showSuccess('Hors-ligne — achats indisponibles', 'Solde gere par la centrale');
     return;
   }
+  // Health probe : si la centrale ne repond pas, on refuse net plutot que
+  // de laisser l'usager tomber sur une erreur 4 etapes plus tard.
+  if(_centralOnline === false) {
+    showSuccess('Centrale hors-ligne', 'Achats indisponibles — reessayez sous peu');
+    probeCentralHealth(); // re-probe immediat au cas ou la connexion est revenue
+    return;
+  }
   // Bloquer les transactions en mode démo
   if(lunchSession && lunchSession.profile.role === 'demo') {
     showSuccess('Mode démo — transaction désactivée', 'Compte de démonstration');
@@ -3278,6 +3399,11 @@ async function confirmReservation() {
   if(price > 0) {
     if(!NET_MODE) {
       showSuccess('Hors-ligne — achats indisponibles', 'Solde gere par la centrale');
+      return;
+    }
+    if(_centralOnline === false) {
+      showSuccess('Centrale hors-ligne', 'Reessayez sous peu');
+      probeCentralHealth();
       return;
     }
     if(!lunchSession?.token || !lunchSession?.profile?.id) {
@@ -4688,10 +4814,14 @@ window.addEventListener('beforeunload', _kioskCleanupOnUnload);
 // beforeunload est parfois ignore.
 window.addEventListener('pagehide', _kioskCleanupOnUnload);
 
-// Mode réseau : charger depuis Supabase
+// Mode réseau : charger depuis Supabase + demarrer le probe central
 if(NET_MODE) {
   showNetBadge('⏳ CONNEXION…', '#4fa3e8');
   loadFromSupabase();
+  // Demarre le probe central (poll 60s + reaction online/offline). Le probe
+  // controle l'affichage du badge net-badge en mode reseau et grise les
+  // boutons d'achat quand la centrale ne repond pas.
+  startCentralHealthProbe();
 } else {
   showNetBadge('💾 LOCAL', '#888');
 }
