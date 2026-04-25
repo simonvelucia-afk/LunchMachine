@@ -2035,15 +2035,17 @@ async function saveZoneToSupabase(zoneKey) {
 // depId         : uuid du dependant si l'achat est fait pour lui (sinon null)
 // slotDbId      : uuid de la ligne lunch_slots (slot._db_id)
 // idempotencyKey: cle stable cote client pour rejouer sans double-debit.
-//                 Obligatoire quand _financeCentralEnabled (la RPC centrale
-//                 refuse les achats sans cle). Ignoree cote local.
+//                 Obligatoire pour central (la RPC centrale refuse les achats
+//                 sans cle). Ignoree cote local.
 // Retourne { transaction_id, virtual_balance } ou throw en cas d'echec.
 async function rpcLunchPurchase({ userId, depId, slotDbId, buyerName, price, idempotencyKey }) {
   if(!NET_MODE) throw new Error('Hors-ligne');
 
-  // Bascule : si le flag est actif et qu'on a une session user, on passe par
-  // la centrale via finance-bridge. Sinon on garde la RPC locale CoHabitat.
-  if(_financeCentralEnabled && lunchSession && lunchSession.token) {
+  // Central est la source de verite pour le solde (ensure_client + get_balance
+  // auto-provisionnent en cas de besoin). Tant qu'on a un JWT de session, on
+  // passe par finance-bridge. Le fallback CoHabitat n'est utilise que pour le
+  // mode borne sans authentification (lunchSession absent).
+  if(lunchSession && lunchSession.token) {
     if(!idempotencyKey) throw new Error('idempotency_key manquant (requis par finance-bridge)');
     const res = await fetch(FINANCE_BRIDGE_URL + '/lunch-purchase', {
       method: 'POST',
@@ -2107,8 +2109,11 @@ async function rpcLunchPurchase({ userId, depId, slotDbId, buyerName, price, ide
 // Recupere le solde virtuel courant. Si depId est fourni, retourne le solde
 // du dependant ; sinon celui du resident principal.
 // Source :
-//   - _financeCentralEnabled + session user  -> central via finance-bridge
-//   - sinon                                  -> RPC CoHabitat lunch_get_balance
+//   - session user (JWT)  -> central via finance-bridge (source de verite)
+//   - sinon (mode borne)  -> RPC CoHabitat lunch_get_balance
+// Le drapeau _financeCentralEnabled n'est plus pris en compte ici : central
+// auto-provisionne (sql/016 ensure_client) et get_balance retourne 0.00 pour
+// un client sans solde, donc tout JWT valide produit un solde fiable.
 // Retourne null si offline, profile manquant, ou erreur reseau (l'UI doit
 // alors afficher "—" pour rester sobre plutot que "0$" qui serait trompeur).
 async function fetchUserBalance(userId, depId) {
@@ -2117,7 +2122,7 @@ async function fetchUserBalance(userId, depId) {
     return null;
   }
 
-  if(_financeCentralEnabled && lunchSession && lunchSession.token) {
+  if(lunchSession && lunchSession.token) {
     try {
       var res = await fetch(FINANCE_BRIDGE_URL + '/get-balance', {
         method: 'POST',
