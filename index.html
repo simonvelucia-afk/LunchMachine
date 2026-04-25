@@ -4637,7 +4637,14 @@ renderLangBtns();
 updateAdminBtn();
 
 // ─── Auto-login via token passé dans l'URL depuis CoHabitat ──────────────────
-// URL format: ?machine=xxx&chtoken=ACCESS_TOKEN
+// URL format: ?machine=xxx&chsession=SESSION_ID
+//
+// Phase 3D : la row lunch_sessions transporte aussi access_token et
+// finance_central_enabled (cf CoHabitat sql/003), pour que le kiosque puisse
+// debiter directement la centrale via finance-bridge au lieu de la RPC locale
+// lunch_purchase. Sans ces deux champs, _financeCentralEnabled reste false
+// et lunchSession.token est null, donc rpcLunchPurchase tombe systematique-
+// ment sur le chemin local : central jamais debite, divergence permanente.
 (async function() {
   const params    = new URLSearchParams(location.search);
   const sessionId = params.get('chsession');
@@ -4651,16 +4658,28 @@ updateAdminBtn();
   history.replaceState(null, '', location.pathname + '?machine=' + MACHINE_ID);
 
   try {
-    // Lire la session depuis Modulimo Central (même Supabase que Machine Lunch)
-    const rows = await qFetch('lunch_sessions?id=eq.' + sessionId + '&select=*');
+    // CoHabitat openKiosk navigue le popup AVANT d'INSERT la row pour
+    // preserver l'user activation et eviter le bug about:blank. Le kiosque
+    // peut donc demarrer avant que la row soit visible. On retry quelques
+    // fois (300ms x 6 = ~2s) avant d'abandonner.
+    let rows = null;
+    for(let attempt = 0; attempt < 6; attempt++) {
+      rows = await qFetch('lunch_sessions?id=eq.' + sessionId + '&select=*');
+      if(rows && rows.length) break;
+      await new Promise(function(r){ setTimeout(r, 300); });
+    }
     console.log('[chsession] rows:', JSON.stringify(rows));
-    if(!rows || !rows.length) { console.warn('[chsession] session introuvable'); return; }
+    if(!rows || !rows.length) { console.warn('[chsession] session introuvable apres 2s'); return; }
     const sess = rows[0];
 
     // Vérifier expiration
     if(new Date(sess.expires_at) < new Date()) { console.warn('[chsession] session expirée'); return; }
 
-    // Supprimer la session (usage unique)
+    // Supprimer la session (usage unique). On le fait APRES extraction des
+    // champs sensibles (access_token) — sinon une erreur reseau sur le DELETE
+    // perdrait le token sans qu'on l'ait utilise.
+    const accessToken = sess.access_token || null;
+    const centralFlag = sess.finance_central_enabled === true;
     await qFetch('lunch_sessions?id=eq.' + sessionId, { method: 'DELETE' });
 
     // Construire le profil depuis la session
@@ -4673,15 +4692,28 @@ updateAdminBtn();
       resident_plan: sess.resident_plan
     };
 
-    // Charger les dépendants depuis CoHabitat si possible, sinon tableau vide
+    // Charger les dépendants depuis CoHabitat avec le token si dispo
+    // (sinon tableau vide — le kiosque reste utilisable pour le resident lui-meme).
     let deps = [];
-    try {
-      const { SUPABASE_URL: chUrl, SUPABASE_ANON_KEY: chAnon } = window._chConfig || {};
-      // On ne peut pas charger les dépendants cross-Supabase sans token — tableau vide
-    } catch(e) {}
+    if(accessToken) {
+      try {
+        deps = await chFetch(
+          'dependents?parent_id=eq.' + sess.user_id + '&allow_lunch=eq.true&select=id,name,age&order=name',
+          {}, accessToken
+        ) || [];
+      } catch(e) { console.warn('[chsession] deps load failed:', e.message || e); }
+    }
 
-    lunchSession = { profile, dependents: deps, token: null };
-    console.log('[chsession] ✓ session créée pour:', profile.full_name, '| role:', profile.role);
+    // Bascule centrale : si CoHabitat a le flag actif ET nous a transmis un
+    // token, on active le chemin finance-bridge pour les achats et lectures
+    // de solde du kiosque. Sans token, on reste forcement sur la RPC locale
+    // (finance-bridge refuse les appels sans Bearer).
+    _financeCentralEnabled = centralFlag && !!accessToken;
+    if(_financeCentralEnabled) console.info('[finance-central] enabled via chsession handoff');
+    else if(centralFlag && !accessToken) console.warn('[finance-central] flag actif cote CoHabitat mais aucun token relayé — fallback local');
+
+    lunchSession = { profile, dependents: deps, token: accessToken };
+    console.log('[chsession] ✓ session créée pour:', profile.full_name, '| role:', profile.role, '| central:', _financeCentralEnabled);
     resetLunchSessionTimer();
     updateAdminBtn();
     queueRender();
