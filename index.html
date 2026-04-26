@@ -4761,18 +4761,32 @@ updateAdminBtn();
   history.replaceState(null, '', location.pathname + '?machine=' + MACHINE_ID);
 
   try {
-    // CoHabitat openKiosk navigue le popup AVANT d'INSERT la row pour
-    // preserver l'user activation et eviter le bug about:blank. Le kiosque
-    // peut donc demarrer avant que la row soit visible. On retry quelques
-    // fois (300ms x 6 = ~2s) avant d'abandonner.
+    // CoHabitat openKiosk ouvre le popup avec l'URL finale immediatement
+    // (sans etape about:blank) et fait l'INSERT lunch_sessions en arriere-
+    // plan. Le kiosque peut donc demarrer plusieurs centaines de ms avant
+    // que la row soit visible cote DB. On retry assez longtemps pour
+    // tolerer un INSERT lent : 20 x 300ms = 6 s + latence des fetchs.
+    // Sinon symptome typique : pas de "J'ai termine" car lunchSession reste
+    // null faute de pouvoir lire la row.
     let rows = null;
-    for(let attempt = 0; attempt < 6; attempt++) {
-      rows = await qFetch('lunch_sessions?id=eq.' + sessionId + '&select=*');
-      if(rows && rows.length) break;
+    let lastErr = null;
+    for(let attempt = 0; attempt < 20; attempt++) {
+      try {
+        rows = await qFetch('lunch_sessions?id=eq.' + sessionId + '&select=*');
+        if(rows && rows.length) break;
+      } catch(e) {
+        lastErr = e;
+        console.warn('[chsession] fetch tentative', attempt + 1, 'echouee:', e.message || e);
+      }
       await new Promise(function(r){ setTimeout(r, 300); });
     }
-    console.log('[chsession] rows:', JSON.stringify(rows));
-    if(!rows || !rows.length) { console.warn('[chsession] session introuvable apres 2s'); return; }
+    console.log('[chsession] rows apres retry:', rows ? rows.length : 0, 'attempts');
+    if(!rows || !rows.length) {
+      console.warn('[chsession] session introuvable apres 6s — bootstrap abandonne', lastErr || '');
+      // Toast UI pour que l'usager comprenne que la session n'est pas active.
+      if(typeof showSuccess === 'function') showSuccess('Session non chargee', 'Fermez et reessayez depuis CoHabitat');
+      return;
+    }
     const sess = rows[0];
 
     // Vérifier expiration
