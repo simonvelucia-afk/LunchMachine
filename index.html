@@ -2042,6 +2042,17 @@ function updateOfflineLocks() {
 const MACHINE_ID = new URLSearchParams(location.search).get('machine') || null;
 const NET_MODE   = !!MACHINE_ID;
 
+// Mode démo : ?demo=1 active un kiosque autonome avec donnees fictives
+// (slots, profil, dependants, soldes). Aucun appel reseau, aucun debit
+// reel — sert a faire essayer la machine sur le site public sans qu'un
+// visiteur sans compte puisse interferer avec une vraie machine. NET_MODE
+// reste false : tous les `if(!NET_MODE) return;` de persistance sont des
+// no-op naturels en mode demo, donc rien ne touche Supabase ni la
+// centrale Modulimo.
+const DEMO_MODE = new URLSearchParams(location.search).get('demo') === '1';
+let _demoBalance = 0;
+const _demoDepBalances = {};
+
 async function sbFetch(path, opts) {
   const res = await fetch(SB_URL + '/rest/v1/' + path, {
     ...opts,
@@ -2199,6 +2210,11 @@ async function saveZoneToSupabase(zoneKey) {
 // Retourne null si offline, profile manquant, pas de session, ou erreur
 // reseau (l'UI affiche alors "—" plutot que "0$" qui serait trompeur).
 async function fetchUserBalance(userId, depId) {
+  if(DEMO_MODE) {
+    return depId
+      ? (typeof _demoDepBalances[depId] === 'number' ? _demoDepBalances[depId] : 0)
+      : _demoBalance;
+  }
   if(!NET_MODE || !userId) {
     console.log('[fetchUserBalance] skip:', { NET_MODE: NET_MODE, userId: userId });
     return null;
@@ -2384,6 +2400,8 @@ function loadState() {
 }
 
 function saveState() {
+  // Mode demo : ne pas polluer le cache `mlstate` qui sert au mode LOCAL.
+  if(DEMO_MODE) return;
   // Toujours sauver local comme cache
   try { localStorage.setItem('mlstate', JSON.stringify(state)); } catch(e) {}
 }
@@ -3304,19 +3322,21 @@ function startPurchase(id) {
   // Le solde vit sur la centrale Modulimo : sans connexion, aucun achat
   // possible. La machine reste utilisable pour ses fonctions de controle
   // locales (remplissage, vidage, calibration), mais pas pour vendre.
-  if(!NET_MODE) {
+  // En DEMO_MODE on contourne ces gardes : tout reste local et fictif.
+  if(!NET_MODE && !DEMO_MODE) {
     showSuccess('Hors-ligne — achats indisponibles', 'Solde gere par la centrale');
     return;
   }
   // Health probe : si la centrale ne repond pas, on refuse net plutot que
   // de laisser l'usager tomber sur une erreur 4 etapes plus tard.
-  if(_centralOnline === false) {
+  if(!DEMO_MODE && _centralOnline === false) {
     showSuccess('Centrale hors-ligne', 'Achats indisponibles — reessayez sous peu');
     probeCentralHealth(); // re-probe immediat au cas ou la connexion est revenue
     return;
   }
-  // Bloquer les transactions en mode démo
-  if(lunchSession && lunchSession.profile.role === 'demo') {
+  // Bloquer les transactions en mode démo (compte demo reel cote CoHabitat ;
+  // a ne pas confondre avec DEMO_MODE = kiosque public d'essai).
+  if(!DEMO_MODE && lunchSession && lunchSession.profile.role === 'demo') {
     showSuccess('Mode démo — transaction désactivée', 'Compte de démonstration');
     return;
   }
@@ -3403,7 +3423,25 @@ async function confirmReservation() {
   // down), on REFUSE la reservation — le robot ne bouge pas, l'usager
   // est invite a reessayer. Pour les slots gratuits (price=0), aucun
   // debit n'est tente.
-  if(price > 0) {
+  if(price > 0 && DEMO_MODE) {
+    // Faux debit local : verifie le solde fictif du payeur (resident ou
+    // dependant) et le decremente. Aucune trace cote Supabase ou centrale.
+    var demoDepId  = lunchSelectedPerson?.depId || null;
+    var demoBalCur = demoDepId
+      ? (typeof _demoDepBalances[demoDepId] === 'number' ? _demoDepBalances[demoDepId] : 0)
+      : _demoBalance;
+    if(demoBalCur < price) {
+      showSuccess('✗ Solde insuffisant (démo)', '');
+      return;
+    }
+    if(demoDepId) {
+      _demoDepBalances[demoDepId] = demoBalCur - price;
+    } else {
+      _demoBalance = demoBalCur - price;
+      _lastBalance = _demoBalance;
+    }
+    if(typeof refreshHeaderBalance === 'function') refreshHeaderBalance();
+  } else if(price > 0) {
     if(!NET_MODE) {
       showSuccess('Hors-ligne — achats indisponibles', 'Solde gere par la centrale');
       return;
@@ -4864,7 +4902,9 @@ window.addEventListener('beforeunload', _kioskCleanupOnUnload);
 window.addEventListener('pagehide', _kioskCleanupOnUnload);
 
 // Mode réseau : charger depuis Supabase + demarrer le probe central
-if(NET_MODE) {
+if(DEMO_MODE) {
+  bootDemoMode();
+} else if(NET_MODE) {
   showNetBadge('⏳ CONNEXION…', '#4fa3e8');
   loadFromSupabase();
   // Demarre le probe central (poll 60s + reaction online/offline). Le probe
@@ -4873,6 +4913,79 @@ if(NET_MODE) {
   startCentralHealthProbe();
 } else {
   showNetBadge('💾 LOCAL', '#888');
+}
+
+// ─── Mode démo : kiosque autonome avec donnees fictives ────────────────────
+// Active par ?demo=1. Installe un state, une session et des soldes
+// synthetiques pour qu'un visiteur du site public puisse essayer la
+// machine sans compte ni connexion centrale. Aucune donnee fictive ne
+// remonte vers Supabase ou la centrale (NET_MODE reste false, saveState
+// est gate par DEMO_MODE).
+function bootDemoMode() {
+  // Plats varies pour montrer le grid mixte. Quelques cases laissees
+  // vides pour illustrer l'etat "case libre".
+  var demoSlots = [
+    { desc:'poulet, riz, biscuits, jus de pomme', price:10.00, allergens:['Gluten'],                 calories:520, proteines:28, glucides:62, lipides:14 },
+    { desc:'sandwich jambon-fromage, salade',     price:7.50,  allergens:['Gluten','Lactose'],       calories:410, proteines:18, glucides:45, lipides:16 },
+    { desc:'lasagne aux légumes, fruit',          price:12.00, allergens:['Gluten','Lactose'],       calories:610, proteines:24, glucides:70, lipides:22 },
+    { desc:'soupe minestrone, pain, yaourt',      price:6.00,  allergens:['Gluten','Lactose'],       calories:340, proteines:12, glucides:48, lipides:10 },
+    { desc:'salade César au poulet',              price:9.50,  allergens:['Gluten','Œufs'],          calories:430, proteines:30, glucides:24, lipides:22 },
+    { desc:'sushi assortiment, soya',             price:13.00, allergens:['Soja','Poisson'],         calories:480, proteines:22, glucides:60, lipides:14 },
+    { desc:'pâtes carbonara, tiramisu',           price:11.50, allergens:['Gluten','Lactose','Œufs'],calories:680, proteines:26, glucides:78, lipides:28 },
+    { desc:'wrap végétarien, jus orange',         price:8.00,  allergens:['Gluten'],                 calories:380, proteines:14, glucides:52, lipides:11 }
+  ];
+  var def = defaultState();
+  state = Object.assign({}, def, {
+    boxCount: Math.max(0, def.boxMax - 5),
+    machineName: 'Machine de démonstration',
+    slots: def.slots.map(function(s, i) {
+      // Une case sur quatre reste vide pour montrer l'etat "libre".
+      if(i % 4 === 3) return Object.assign({}, s, { desc:'', price:0, reserved:false, reservedBy:'' });
+      var sample = demoSlots[i % demoSlots.length];
+      return Object.assign({}, s, sample, { reserved:false, reservedBy:'' });
+    })
+  });
+
+  // Nom dans la topbar.
+  var lbl = document.getElementById('tth-main');
+  if(lbl) lbl.textContent = 'Machine de démonstration';
+
+  // Session synthetique. role volontairement different de 'demo' pour ne
+  // pas declencher la garde de blocage des comptes demo reels (cf.
+  // startPurchase) — DEMO_MODE prend le relais avec sa propre logique.
+  lunchSession = {
+    profile: {
+      id:            'demo-user',
+      full_name:     'Alex Démo',
+      unit:          '101',
+      role:          'demo-mode',
+      is_active:     true,
+      resident_plan: 'local'
+    },
+    dependents: [
+      { id: 'demo-dep-1', name: 'Léa Démo',  age: 12 },
+      { id: 'demo-dep-2', name: 'Noah Démo', age: 8  }
+    ],
+    token: null
+  };
+  _demoBalance = 50.00;
+  _demoDepBalances['demo-dep-1'] = 25.00;
+  _demoDepBalances['demo-dep-2'] = 8.00;
+  _lastBalance = _demoBalance;
+
+  // Banniere persistante pour rappeler le contexte tout au long de l'essai.
+  var banner = document.createElement('div');
+  banner.id = 'demo-mode-banner';
+  banner.style.cssText = 'background:#1a3340;border:1px solid #4f9cb8;color:#a8d6e8;font-family:monospace;font-size:11px;padding:6px 10px;text-align:center;letter-spacing:.04em;';
+  banner.textContent = '🧪 MODE DÉMO — Aucun achat réel. Profil, dépendants et soldes fictifs.';
+  var home = document.getElementById('screen-home');
+  if(home && home.firstChild) home.insertBefore(banner, home.firstChild);
+
+  showNetBadge('🧪 DÉMO', '#4f9cb8');
+  resetLunchSessionTimer();
+  if(typeof updateAdminBtn === 'function') updateAdminBtn();
+  if(typeof refreshHeaderBalance === 'function') refreshHeaderBalance();
+  renderAll();
 }
 
 // ═════════════════════════window.gantryQueue = window.gantryQueue || [];
@@ -4975,6 +5088,19 @@ window.gantryWaitingPickup = false;
     // Forcer passage en returnToSlot (le robot est encore à la cueillette)
     G.phase = 'returnToSlot';
     G.timer = 10;
+
+    // Mode demo : refund local immediat sur le solde fictif. Aucun appel
+    // finance-bridge — le bloc real-refund ci-dessous est de toute facon
+    // gate par NET_MODE.
+    if(DEMO_MODE && job.debitedAtReservation && Number(job.price) > 0) {
+      if(job.depId) {
+        _demoDepBalances[job.depId] = (Number(_demoDepBalances[job.depId]) || 0) + Number(job.price);
+      } else {
+        _demoBalance = (Number(_demoBalance) || 0) + Number(job.price);
+        _lastBalance = _demoBalance;
+      }
+      if(typeof refreshHeaderBalance === 'function') refreshHeaderBalance();
+    }
 
     // P3 : refund automatique du pre-debit. La cle d'idempotence est
     // derivee de l'idempotency_key de l'achat ('lunch:refund:' + key)
