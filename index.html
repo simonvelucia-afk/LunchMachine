@@ -4973,15 +4973,13 @@ function bootDemoMode() {
   _demoDepBalances['demo-dep-2'] = 8.00;
   _lastBalance = _demoBalance;
 
-  // Banniere persistante pour rappeler le contexte tout au long de l'essai.
-  var banner = document.createElement('div');
-  banner.id = 'demo-mode-banner';
-  banner.style.cssText = 'background:#1a3340;border:1px solid #4f9cb8;color:#a8d6e8;font-family:monospace;font-size:11px;padding:6px 10px;text-align:center;letter-spacing:.04em;';
-  banner.textContent = '🧪 MODE DÉMO — Aucun achat réel. Profil, dépendants et soldes fictifs.';
-  var home = document.getElementById('screen-home');
-  if(home && home.firstChild) home.insertBefore(banner, home.firstChild);
-
+  // Le contexte demo est signale via : (1) le badge "🧪 DÉMO" dans la
+  // topbar, (2) le nom "Machine de démonstration", (3) l'URL ?demo=1.
+  // On evite la banniere pleine-largeur qui cassait le layout fixe
+  // 800x480 et faisait deborder le bas du grid hors du viewport scaled.
   showNetBadge('🧪 DÉMO', '#4f9cb8');
+  var demoBadge = document.getElementById('net-badge');
+  if(demoBadge) demoBadge.title = 'Mode démo : aucun achat réel. Profil, dépendants et soldes fictifs.';
   resetLunchSessionTimer();
   if(typeof updateAdminBtn === 'function') updateAdminBtn();
   if(typeof refreshHeaderBalance === 'function') refreshHeaderBalance();
