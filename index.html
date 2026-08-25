@@ -3470,9 +3470,23 @@ async function confirmReservation() {
     if(debit && debit.queued) {
       // Le reseau a flanche entre le probe (OK) et le POST. On refuse
       // pour ne pas dispatcher le robot tant que central n'a pas confirme.
-      // L'op restera dans l'outbox mais ne sert a rien sans reservation —
-      // on la retire explicitement pour ne pas debiter dans le vide.
-      try { _balanceOps.clearAll && /* on garde l'outbox; juste un log */ console.warn('[confirmReservation] pre-debit queued, op orpheline dans outbox'); } catch(_) {}
+      //
+      // L'op mise en file ne sert alors a rien : aucune reservation n'a
+      // ete prise, aucun robot ne partira, aucun plat ne sera livre. La
+      // laisser dans l'outbox la ferait partir au retour du reseau et
+      // debiterait le locataire pour un repas qu'il n'a jamais eu. On la
+      // retire donc pour de bon — l'ancienne ligne annoncait ce retrait
+      // mais n'ecrivait qu'un avertissement dans la console.
+      var retiree = false;
+      try {
+        retiree = !!(_balanceOps.cancelQueued && _balanceOps.cancelQueued(debit.queueId));
+      } catch(_) {}
+      if(!retiree) {
+        // Un kiosque servi depuis une version anterieure de balanceOps.js
+        // n'a pas cancelQueued. Mieux vaut le dire que de le taire.
+        console.error('[confirmReservation] pre-debit queued NON retire de l\'outbox '
+                    + '— risque de debit sans repas. queueId=', debit.queueId);
+      }
       showSuccess('Reseau instable — reessayez', 'Aucun robot dispatche');
       return;
     }
