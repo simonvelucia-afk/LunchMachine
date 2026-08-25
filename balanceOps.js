@@ -337,6 +337,24 @@
       saveOutbox(next);
     }
     function clearAll() { saveOutbox([]); }
+    // Retire UNE operation mise en file, par son queueId.
+    //
+    // A n'employer que lorsque l'appelant a refuse l'action a cause du
+    // queued : rien n'a ete livre, rien ne doit etre debite, et laisser
+    // l'op dans l'outbox garantirait au contraire le debit au retour du
+    // reseau. C'est le seul cas ou retirer est correct — pour une action
+    // deja effectuee, l'op doit rester et etre rejouee.
+    //
+    // Reste une fenetre irreductible : un statut 0 (delai depasse) peut
+    // signifier que la centrale a recu le POST malgre tout. Le retrait ne
+    // la supprime pas, il la ramene d'une certitude a un cas rare — au
+    // lieu d'un debit assure sans contrepartie.
+    function cancelQueued(queueId) {
+      if (!queueId) return false;
+      var avant = loadOutbox().length;
+      removeFromOutbox(queueId);
+      return loadOutbox().length < avant;
+    }
 
     return {
       commit: commit,
@@ -347,6 +365,7 @@
       retryNow: retryNow,
       clearStuck: clearStuck,
       clearAll: clearAll,
+      cancelQueued: cancelQueued,
     };
   }
 
