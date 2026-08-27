@@ -1593,6 +1593,12 @@ const LANGS = {
     // Grid
     buyHint: '🍱  Mode Achat — sélectionnez une case disponible',
     free: 'libre(s)',
+    // « free » ci-dessus veut dire « case vacante ». Sans prix, c'est un
+    // autre mot : la confusion se voyait a l'ecran d'achat, qui affichait
+    // « libre(s) » la ou il fallait lire « Gratuit ».
+    priceFree: 'Gratuit',
+    btnTake: 'Prendre',
+    takeMsg: (name) => `C'est a vous, ${name} !`,
     slotFree: 'Libre',
     slotReserved: 'Réservée',
     slotEmpty: 'Vide',
@@ -1673,6 +1679,9 @@ const LANGS = {
     btnBuySub: 'Select and confirm',
     buyHint: '🍱  Purchase Mode — select an available slot',
     free: 'available',
+    priceFree: 'Free',
+    btnTake: 'Take it',
+    takeMsg: (name) => `It's yours, ${name}!`,
     slotFree: 'Available',
     slotReserved: 'Reserved',
     slotEmpty: 'Empty',
@@ -1742,6 +1751,9 @@ const LANGS = {
     btnBuySub: 'Seleccionar y confirmar',
     buyHint: '🍱  Modo Compra — selecciona un cajón disponible',
     free: 'disponible(s)',
+    priceFree: 'Gratis',
+    btnTake: 'Tomar',
+    takeMsg: (name) => `¡Es tuyo, ${name}!`,
     slotFree: 'Disponible',
     slotReserved: 'Reservado',
     slotEmpty: 'Vacío',
@@ -1858,8 +1870,28 @@ function defaultState() {
   return { zones, slots, pin:'1234', colorRanges, boxMax:30, boxCount:30, menus:[], gantryAutoSpeed:5 };
 }
 
-// Simulate slow drift of actual temperature toward setpoint
+// Derive lente de la temperature vers la consigne — une SIMULATION, pas
+// une mesure. Aucun capteur n'alimente ces chiffres.
+//
+// Elle ecrasait toute valeur reelle : lunch_zones.actual est lu au
+// demarrage depuis la base centrale, puis efface en moins de quatre
+// secondes par ce calcul. Le jour ou une sonde ecrira la vraie
+// temperature, elle serait restee invisible.
+//
+// Desormais la derive ne tourne qu'a defaut de lecture reelle, et l'ecran
+// dit laquelle des deux il montre. Une chaine de froid inventee serait
+// pire que pas de chaine de froid du tout : on croirait la lire.
+// `var` et non `let` : renderTempStrip peut s'executer avant cette ligne, et
+// une TDZ y jetterait une ReferenceError. Hoiste a `undefined`, donc faux —
+// l'ecran retombe sur « simulee », qui est la bonne valeur par defaut.
+var _tempReelle = false;
+// Point d'entree pour une vraie sonde. Une mesure sans horodatage ne se
+// distingue pas d'une mesure perimee : celui qui appellera ceci devra donc
+// aussi rafraichir, faute de quoi un chiffre fige passerait pour mesure.
+function marquerTemperatureReelle() { _tempReelle = true; }
+
 function tickTemperatures() {
+  if(_tempReelle) return;   // une sonde parle : on se tait
   Object.values(state.zones).forEach(z => {
     const diff = z.setpoint - z.actual;
     const drift = (Math.random() - 0.48) * 0.3; // slight noise
@@ -2320,24 +2352,43 @@ async function saveMachineSettingsToSupabase(patch) {
   }
 }
 
-// Conserve pour les slots gratuits (price === 0) : simple trace, pas de debit.
-// lunch_transactions vit desormais sur CoHabitat (meme instance que profiles).
-async function saveFreeTransactionToSupabase(slotDbId, buyerName) {
+// Trace d'un retrait sans prix : pas de debit, juste qui a pris quoi.
+// lunch_transactions vit sur CoHabitat (meme instance que profiles).
+//
+// userId/depId/token sont passes explicitement : appelee a confirmPickup, elle
+// ne peut plus les relire dans lunchSession/lunchSelectedPerson, que
+// startPurchase remet a zero et que le minuteur de session peut avoir expires.
+// Les relire ici aurait consigne des retraits anonymes.
+//
+// Le token est indispensable. Sans lui, chFetch part avec la cle anon : la
+// requete s'execute en role `anon`, auth.uid() est NULL, et lunch_transactions
+// n'accepte que des insertions dont user_id vaut auth.uid(). C'est ce qui
+// faisait echouer TOUS les retraits gratuits en silence — l'erreur RLS
+// n'atterrissait que dans la console.
+async function saveFreeTransactionToSupabase(slotDbId, slotNum, buyerName, userId, depId, token) {
   if(!NET_MODE) return;
+  if(!token) {
+    console.error('[saveFreeTransaction] aucun jeton de session — retrait non consigne',
+                  { slotDbId: slotDbId, buyerName: buyerName });
+    return;
+  }
   try {
-    const userId = lunchSession?.profile?.id || null;
-    const depId  = lunchSelectedPerson?.depId || null;
     await chFetch('lunch_transactions', {
       method: 'POST',
       body: JSON.stringify({
         machine_id: MACHINE_ID,
         slot_id:    slotDbId,
+        // Le numero ecrit sur la porte. slot_id est l'identifiant de
+        // lunch_slots sur la base CENTRALE : CoHabitat ne sait pas le
+        // traduire, la table de correspondance n'est pas chez lui. C'est
+        // par ce numero-ci qu'une offre partagee retrouve sa case.
+        slot_num:   (typeof slotNum === 'number') ? slotNum : null,
         buyer_name: buyerName || '',
         price:      0,
-        user_id:    userId,
-        dep_id:     depId
+        user_id:    userId || null,
+        dep_id:     depId  || null
       })
-    });
+    }, token);
   } catch(err) { console.error('saveFreeTransaction error:', err); }
 }
 
@@ -2498,10 +2549,16 @@ function renderTempStrip(el) {
     const count = state.slots.filter(s=>s.zone===id&&s.desc).length;
     const total = state.slots.filter(s=>s.zone===id).length;
     const actual = (z.actual ?? z.setpoint).toFixed(1);
-    el.innerHTML += `<div class="temp-zone">
+    // Le tilde separe une valeur simulee d'une mesure. Tant qu'aucune sonde
+    // ne parle, l'ecran ne doit pas laisser croire qu'il mesure quoi que ce
+    // soit — surtout au-dessus d'aliments.
+    const marque = _tempReelle ? '' : '~';
+    const titre  = _tempReelle ? 'Temperature mesuree'
+                               : 'Temperature simulee — aucune sonde raccordee';
+    el.innerHTML += `<div class="temp-zone" title="${titre}">
       <div class="temp-dot" style="background:${color};${atSetpoint?'box-shadow:0 0 5px '+color+'88':''}"></div>
       <div class="temp-zone-label" style="color:${atSetpoint?color:'var(--text-faint)'};">${z.name}</div>
-      <div class="temp-val" style="color:${atSetpoint?color:'var(--text-faint)'};">${actual}°C</div>
+      <div class="temp-val" style="color:${atSetpoint?color:'var(--text-faint)'};">${marque}${actual}°C</div>
       <div style="font-family:'Space Mono',monospace;font-size:9px;color:var(--text-faint);margin-left:2px;">/ ${z.setpoint}°C</div>
       <div class="temp-cases">${count}/${total}</div>
     </div>`;
@@ -2532,7 +2589,7 @@ function renderMachineZoneOverlays() {
     nameDiv.textContent = z.name;
     const tempDiv = document.createElement('div');
     tempDiv.style.cssText = 'font-family:"Space Mono",monospace;font-size:8px;color:' + (atSetpoint ? color : '#555') + ';background:rgba(0,0,0,.6);padding:1px 5px;margin-top:2px;white-space:nowrap;';
-    tempDiv.textContent = actual + '/ ' + z.setpoint + '°';
+    tempDiv.textContent = (_tempReelle ? '' : '~') + actual + '/ ' + z.setpoint + '°';
     div.appendChild(nameDiv);
     div.appendChild(tempDiv);
     el.appendChild(div);
@@ -2735,7 +2792,7 @@ function openSlot(id) {
   selectedSlotId = id;
   const zone = state.zones[slot.zone];
   const color = zoneColor(zone);
-  const priceStr = (slot.price > 0) ? slot.price.toFixed(2) + ' $' : 'Gratuit';
+  const priceStr = (slot.price > 0) ? slot.price.toFixed(2) + ' $' : t('priceFree');
 
   // Photo
   const img = document.getElementById('dish-photo-img');
@@ -2797,7 +2854,9 @@ function openSlot(id) {
 
   // Bouton acheter
   const buyBtn = document.getElementById('dish-buy-btn');
-  buyBtn.textContent = 'Acheter — ' + priceStr + ' ›';
+  buyBtn.textContent = (slot.price > 0)
+    ? 'Acheter — ' + priceStr + ' \u203a'
+    : t('btnTake') + ' \u203a';
   buyBtn.onclick = function(){ closeDishModal(); startPurchase(id); };
 
   // Reflete l'etat central courant sur le bouton (le bouton est statique
@@ -3348,7 +3407,7 @@ function startPurchase(id) {
   // Populate purchase summary
   const slot = state.slots.find(s=>s.id===id);
   if(slot) {
-    const priceStr = slot.price > 0 ? slot.price.toFixed(2) + ' $' : t('free') || 'Gratuit';
+    const priceStr = slot.price > 0 ? slot.price.toFixed(2) + ' $' : t('priceFree');
     const el = {
       desc:  document.getElementById('ps-desc'),
       price: document.getElementById('ps-price'),
@@ -3406,7 +3465,7 @@ async function confirmReservation() {
   const slotId   = slot.id;
   const price    = slot.price;
   const slotDesc = slot.desc || '';
-  const priceStr = price > 0 ? price.toFixed(2) + ' $' : 'Gratuit';
+  const priceStr = price > 0 ? price.toFixed(2) + ' $' : t('priceFree');
   const xFrac    = zoneId === ZONE_IDS[0] ? 0.551 : 0.849;
   const slotDbId = slot._db_id;
 
@@ -3515,10 +3574,13 @@ async function confirmReservation() {
   slot.expDate = '';
 
   saveState();
-  if(NET_MODE) {
-    saveSlotToSupabase(slot);
-    if(price === 0) saveFreeTransactionToSupabase(slotDbId, buyer);
-  }
+  if(NET_MODE) saveSlotToSupabase(slot);
+  // La trace d'un retrait gratuit s'ecrit desormais a confirmPickup, pas
+  // ici. Un article payant est pre-debite avant le dispatch parce que de
+  // l'argent est en jeu, et une annulation le rembourse. Un article
+  // gratuit n'a rien a rembourser : la ligne ecrite ici restait donc telle
+  // quelle apres une annulation, et l'historique affirmait que quelqu'un
+  // avait pris des oeufs retournes dans la machine.
 
   resetLunchSessionTimer();
   closeNameModal();
@@ -3542,13 +3604,17 @@ async function confirmReservation() {
     buyerName: buyer,
     zoneName: zoneName,
     idempotencyKey: idemKey,
+    // Capture a la reservation : quelques secondes avant la cueillette, donc
+    // encore valide. Le relire a confirmPickup risquerait une session expiree.
+    token:    lunchSession?.token || null,
     // True si un pre-debit a effectivement ete confirme par central. Sert
     // a cancelPickup pour decider de refund ou non (les slots gratuits
     // n'ont pas a etre refundes).
     debitedAtReservation: (price > 0)
   });
 
-  showSuccess(t('successMsg', buyer), '#' + slotId + ' — ' + zoneName + ' — ' + priceStr);
+  showSuccess(t(price > 0 ? 'successMsg' : 'takeMsg', buyer),
+              '#' + slotId + ' \u2014 ' + zoneName + ' \u2014 ' + priceStr);
 }
 
 function showSuccess(msg, sub) {
@@ -5083,6 +5149,15 @@ window.gantryWaitingPickup = false;
     // on n'a plus rien a debiter — l'usager a recupere le plat, central
     // est deja a jour. On rafraichit juste l'affichage du solde au cas ou.
     if(typeof refreshHeaderBalance === 'function') refreshHeaderBalance();
+
+    // Un retrait gratuit se consigne ici : c'est le moment ou le contenant
+    // change de mains. Rien a compenser si le retrait est annule, puisque
+    // rien n'aura ete ecrit.
+    var jobPk = G.currentJob;
+    if(jobPk && NET_MODE && Number(jobPk.price) === 0) {
+      saveFreeTransactionToSupabase(jobPk.slotDbId, jobPk.slotId, jobPk.buyerName,
+                                    jobPk.userId, jobPk.depId, jobPk.token);
+    }
 
     // Le currentJob est conservé jusqu'à ce que le robot soit parké
     // La phase waitPickup détecte gantryWaitingPickup=false et passe à toPark
