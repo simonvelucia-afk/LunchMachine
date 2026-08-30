@@ -358,6 +358,13 @@
   .pin-title { font-family:'Barlow Condensed',sans-serif; font-size:22px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--text-dim); }
   .pin-display { font-family:'Space Mono',monospace; font-size:28px; letter-spacing:.3em; color:var(--accent); min-width:120px; text-align:center; border-bottom:2px solid var(--accent); padding-bottom:4px; }
   .pin-error { font-size:12px; color:var(--accent3); letter-spacing:.05em; min-height:16px; }
+  /* Rappel du code, en mode demonstration seulement : sur une vraie
+     machine il ne doit jamais apparaitre. */
+  .pin-demo-hint {
+    font-family:'Space Mono',monospace; font-size:12px; letter-spacing:.06em;
+    color:var(--accent); border:1px dashed rgba(232,197,71,.4);
+    padding:6px 12px; background:rgba(232,197,71,.06);
+  }
   .numpad { display:grid; grid-template-columns:repeat(3,60px); grid-template-rows:repeat(4,50px); gap:6px; }
   .numpad-btn { background:var(--surface); border:1px solid var(--border); color:var(--text); font-family:'Space Mono',monospace; font-size:18px; cursor:pointer; transition:all .1s; }
   .numpad-btn:hover { background:var(--surface2); border-color:var(--border-active); }
@@ -970,6 +977,7 @@
     </div>
     <div class="content">
       <div class="pin-title" data-i18n="pinTitle">Code administrateur</div>
+      <div class="pin-demo-hint" id="pin-demo-hint" style="display:none;"></div>
       <div class="pin-display" id="pin-display">____</div>
       <div class="pin-error" id="pin-error"></div>
       <div class="numpad">
@@ -1589,6 +1597,7 @@ const LANGS = {
     colReturn: 'RETOUR',
     colPickup: 'CUEILLETTE',
     demoMachine: 'Machine de démonstration',
+    demoPinHint: (code) => `Mode démo — le code est ${code}`,
     demoHint: 'Mode démo : aucun achat réel. Profil, dépendants et soldes fictifs.',
     boxesUnit: 'boîtes',
     pickupWaiting: 'EN ATTENTE',
@@ -1690,6 +1699,7 @@ const LANGS = {
     colReturn: 'RETURN',
     colPickup: 'PICKUP',
     demoMachine: 'Demonstration machine',
+    demoPinHint: (code) => `Demo mode — the code is ${code}`,
     demoHint: 'Demo mode: no real purchase. Fictional profile, dependants and balances.',
     boxesUnit: 'boxes',
     pickupWaiting: 'WAITING',
@@ -1775,6 +1785,7 @@ const LANGS = {
     colReturn: 'DEVOLUCIÓN',
     colPickup: 'RECOGIDA',
     demoMachine: 'Máquina de demostración',
+    demoPinHint: (code) => `Modo demo — el código es ${code}`,
     demoHint: 'Modo demo: ninguna compra real. Perfil, dependientes y saldos ficticios.',
     boxesUnit: 'cajas',
     pickupWaiting: 'EN ESPERA',
@@ -1859,6 +1870,7 @@ const LANGS = {
     colReturn: '归还',
     colPickup: '取餐',
     demoMachine: '演示机器',
+    demoPinHint: (code) => `演示模式 — 密码为 ${code}`,
     demoHint: '演示模式：不产生任何真实交易。资料、家属与余额均为虚构。',
     boxesUnit: '个餐盒',
     pickupWaiting: '等待中',
@@ -2115,6 +2127,7 @@ function applyLang() {
   // passent donc pas par les tables de traduction et doivent etre reecrits
   // a chaque changement de langue.
   if(typeof DEMO_MODE !== 'undefined' && DEMO_MODE) retraduireDemo();
+  rafraichirRappelPin();
   // Re-render all dynamic text
   renderTempStrips();
   renderMachineZoneOverlays();
@@ -2875,6 +2888,18 @@ function showScreen(id) {
   }
   renderTempStrips();
 }
+// Rappel du code d'acces, en mode demonstration seulement. Le code est lu
+// dans l'etat plutot qu'ecrit en dur : si la demo change de code un jour,
+// le rappel reste vrai. Sur une vraie machine, l'element reste masque.
+function rafraichirRappelPin() {
+  var el = document.getElementById('pin-demo-hint');
+  if(!el) return;
+  var demo = (typeof DEMO_MODE !== 'undefined' && DEMO_MODE);
+  if(!demo || !state || !state.pin) { el.style.display = 'none'; return; }
+  el.textContent = t('demoPinHint', state.pin);
+  el.style.display = '';
+}
+
 function goAdmin() {
   // Si session CoHabitat active avec rôle admin → accès direct sans PIN
   if(lunchSession) {
@@ -2886,6 +2911,7 @@ function goAdmin() {
   }
   // Toujours proposer le PIN (mode local ET mode réseau)
   showScreen('screen-pin');
+  rafraichirRappelPin();
 }
 
 // Met à jour la visibilité du bouton ADMIN selon la session CoHabitat
