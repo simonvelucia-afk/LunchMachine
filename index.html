@@ -1000,52 +1000,52 @@
   <!-- ADMIN -->
   <div id="screen-admin" class="screen">
     <div class="topbar">
-      <div class="topbar-logo"><span class="logo-wrap">Machine<span>LUNCH</span></span> <span style="color:var(--accent);font-size:11px;margin-left:8px;">✦ ADMIN</span></div>
+      <div class="topbar-logo"><span class="logo-wrap"><span id="tta-main">Machine</span><span id="tta-sub">LUNCH</span></span> <span style="color:var(--accent);font-size:11px;margin-left:8px;">✦ ADMIN</span></div>
       <div class="topbar-sep"></div>
       <button class="topbar-btn danger" data-i18n="quit" onclick="showScreen('screen-home')">✕ Quitter</button>
     </div>
     <div class="content">
       <div class="admin-sidebar">
         <div class="admin-nav-item active" onclick="adminNav('cases')" id="nav-cases" data-i18n="navCases">Cases</div>
-        <div class="admin-nav-item" onclick="adminNav('menus')" id="nav-menus">Menus</div>
+        <div class="admin-nav-item" onclick="adminNav('menus')" id="nav-menus" data-i18n="adMenus">Menus</div>
         <div class="admin-nav-item" onclick="adminNav('temperatures')" id="nav-temperatures" data-i18n="navTemps">Températures</div>
         <div class="admin-nav-item" onclick="adminNav('config')" id="nav-config" data-i18n="navConfig">Configuration</div>
-        <div class="admin-nav-item" onclick="adminNav('gantry')" id="nav-gantry">Gantry</div>
+        <div class="admin-nav-item" onclick="adminNav('gantry')" id="nav-gantry" data-i18n="adNavGantry">Gantry</div>
         <div class="admin-nav-item" onclick="adminNav('status')" id="nav-status" data-i18n="navStatus">Statuts</div>
       </div>
       <div class="admin-panel active" id="panel-cases">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:8px;">
-          <div class="admin-section-title" style="margin-bottom:0;padding-bottom:0;border-bottom:none;">Gestion des cases</div>
+          <div class="admin-section-title" style="margin-bottom:0;padding-bottom:0;border-bottom:none;" data-i18n="adminCasesTitle">Gestion des cases</div>
           <div id="multi-select-ui" style="display:flex;align-items:center;gap:6px;">
-            <button class="btn" id="multi-select-btn" onclick="toggleMultiSelect()" style="font-size:11px;padding:5px 10px;">☐ Sélection multiple</button>
-            <span id="multi-select-count" style="font-family:'Space Mono',monospace;font-size:10px;color:var(--accent);display:none;">0 cases</span>
-            <button class="btn accent2" id="multi-apply-btn" onclick="openMultiMenuPicker()" style="font-size:11px;padding:5px 10px;display:none;">➤ Appliquer menu</button>
+            <button class="btn" id="multi-select-btn" onclick="toggleMultiSelect()" style="font-size:11px;padding:5px 10px;" data-i18n="adMultiSelect">☐ Sélection multiple</button>
+            <span id="multi-select-count" style="font-family:'Space Mono',monospace;font-size:10px;color:var(--accent);display:none;"></span>
+            <button class="btn accent2" id="multi-apply-btn" onclick="openMultiMenuPicker()" style="font-size:11px;padding:5px 10px;display:none;" data-i18n="adApplyMenu">➤ Appliquer menu</button>
             <button class="btn" id="multi-clear-btn" onclick="clearMultiSelect()" style="font-size:11px;padding:5px 10px;display:none;">✕</button>
           </div>
           <div id="clear-all-ui" style="display:flex;align-items:center;gap:6px;">
-            <button class="btn accent3" id="clear-all-btn" onclick="clearAllConfirm()" style="font-size:11px;padding:5px 12px;">⚠ Vider toutes les cases</button>
+            <button class="btn accent3" id="clear-all-btn" onclick="clearAllConfirm()" style="font-size:11px;padding:5px 12px;" data-i18n="adClearAll">⚠ Vider toutes les cases</button>
             <div id="clear-all-confirm" style="display:none;align-items:center;gap:6px;">
-              <span style="font-size:10px;color:var(--accent3);letter-spacing:.04em;">Confirmer ?</span>
-              <button class="btn accent3" onclick="clearAllSlots()" style="font-size:11px;padding:5px 10px;background:rgba(232,71,71,.15);">✓ Oui, vider</button>
-              <button class="btn" onclick="clearAllCancel()" style="font-size:11px;padding:5px 10px;">✕ Non</button>
+              <span style="font-size:10px;color:var(--accent3);letter-spacing:.04em;" data-i18n="adConfirm">Confirmer ?</span>
+              <button class="btn accent3" onclick="clearAllSlots()" style="font-size:11px;padding:5px 10px;background:rgba(232,71,71,.15);" data-i18n="adYesClear">✓ Oui, vider</button>
+              <button class="btn" onclick="clearAllCancel()" style="font-size:11px;padding:5px 10px;" data-i18n="adNo">✕ Non</button>
             </div>
           </div>
         </div>
         <div id="admin-slots-grid" class="admin-slots-grid"></div>
         <div class="admin-slot-edit" id="admin-slot-edit">
           <div class="admin-row" style="margin-bottom:8px;">
-            <div class="admin-label">Case sélectionnée</div>
+            <div class="admin-label" data-i18n="adminCaseSelected">Case sélectionnée</div>
             <span id="edit-slot-label" style="font-family:'Space Mono',monospace;font-size:12px;color:var(--accent)"></span>
           </div>
 
           <!-- Ligne 1 : description + prix -->
           <div style="display:flex;gap:8px;margin-bottom:6px;">
             <div style="flex:1;">
-              <div class="admin-field-label">Nom du plat / description</div>
+              <div class="admin-field-label" data-i18n="adDishName">Nom du plat / description</div>
               <textarea class="admin-field-input" id="admin-slot-desc" rows="2" placeholder="Ex: Poulet rôti, légumes grillés, riz basmati..."></textarea>
             </div>
             <div style="width:90px;flex-shrink:0;">
-              <div class="admin-field-label">Prix ($)</div>
+              <div class="admin-field-label" data-i18n="adPriceDollar">Prix ($)</div>
               <input class="admin-field-input" type="number" id="admin-slot-price" min="0" step="0.25" placeholder="0.00" style="width:100%;"/>
             </div>
           </div>
@@ -1053,30 +1053,30 @@
           <!-- Ligne 2 : photo URL + chef + date -->
           <div style="display:flex;gap:8px;margin-bottom:6px;">
             <div style="flex:1;">
-              <div class="admin-field-label">Photo du plat</div>
+              <div class="admin-field-label" data-i18n="adDishPhoto">Photo du plat</div>
               <!-- Zone upload fichier -->
               <div class="photo-upload-zone" id="photo-upload-zone" onclick="document.getElementById('photo-file-input').click()">
                 <input type="file" id="photo-file-input" accept="image/*" capture="environment" onchange="handlePhotoFile(event)" style="display:none;">
-                <div class="photo-upload-label">📷 Prendre une photo ou choisir un fichier</div>
-                <div style="font-size:9px;color:var(--text-faint);margin-top:2px;">JPG, PNG — sera uploadé sur GitHub</div>
+                <div class="photo-upload-label" data-i18n="adTakePhoto">📷 Prendre une photo ou choisir un fichier</div>
+                <div style="font-size:9px;color:var(--text-faint);margin-top:2px;" data-i18n="adPhotoHint">JPG, PNG — sera uploadé sur GitHub</div>
               </div>
               <div id="photo-upload-status" class="upload-status"></div>
               <!-- Ou URL manuelle -->
-              <div style="font-family:'Barlow Condensed',sans-serif;font-size:9px;color:var(--text-faint);letter-spacing:.06em;text-transform:uppercase;margin:5px 0 3px;">— OU entrer le nom de fichier —</div>
+              <div style="font-family:'Barlow Condensed',sans-serif;font-size:9px;color:var(--text-faint);letter-spacing:.06em;text-transform:uppercase;margin:5px 0 3px;" data-i18n="adOrFilename">— OU entrer le nom de fichier —</div>
               <div style="font-size:9px;color:var(--text-faint);margin-bottom:3px;font-family:monospace;">raw.githubusercontent.com/simonvelucia-afk/LunchMachine-images/main/</div>
               <div style="display:flex;gap:5px;align-items:center;">
                 <input class="admin-field-input" type="text" id="admin-slot-photo" placeholder="poulet-roti.jpg" style="flex:1;"/>
-                <button class="btn" onclick="previewPhoto()" style="font-size:11px;padding:4px 8px;flex-shrink:0;">Aperçu</button>
+                <button class="btn" onclick="previewPhoto()" style="font-size:11px;padding:4px 8px;flex-shrink:0;" data-i18n="adPreview">Aperçu</button>
               </div>
               <img id="admin-photo-preview" class="admin-photo-preview" src="" alt="" style="display:none;margin-top:4px;"/>
             </div>
             <div style="width:130px;flex-shrink:0;display:flex;flex-direction:column;gap:6px;">
               <div>
-                <div class="admin-field-label">Chef / cuisinier</div>
+                <div class="admin-field-label" data-i18n="adChef">Chef / cuisinier</div>
                 <input class="admin-field-input" type="text" id="admin-slot-chef" placeholder="Prénom Nom" style="width:100%;"/>
               </div>
               <div>
-                <div class="admin-field-label">Date de préparation</div>
+                <div class="admin-field-label" data-i18n="adPrepDate">Date de préparation</div>
                 <input class="admin-field-input" type="date" id="admin-slot-date" style="width:100%;"/>
               </div>
             </div>
@@ -1084,23 +1084,23 @@
 
           <!-- Ligne 3 : ingrédients -->
           <div style="margin-bottom:6px;">
-            <div class="admin-field-label">Ingrédients (liste complète pour traçabilité)</div>
+            <div class="admin-field-label" data-i18n="adIngredientsFull">Ingrédients (liste complète pour traçabilité)</div>
             <textarea class="admin-field-input" id="admin-slot-ingredients" rows="2" placeholder="Poulet (200g), huile d'olive, ail, romarin, sel, poivre..."></textarea>
           </div>
 
           <!-- Ligne 4 : macros -->
           <div style="margin-bottom:6px;">
-            <div class="admin-field-label">Valeurs nutritives (par portion)</div>
+            <div class="admin-field-label" data-i18n="adNutrition">Valeurs nutritives (par portion)</div>
             <div class="admin-macro-row">
               <div class="admin-macro-lbl">kcal</div>
               <input type="number" id="admin-slot-calories" min="0" placeholder="0"/>
-              <div class="admin-macro-lbl" style="margin-left:8px;">Prot.</div>
+              <div class="admin-macro-lbl" style="margin-left:8px;" data-i18n="adProt">Prot.</div>
               <input type="number" id="admin-slot-proteines" min="0" placeholder="0"/>
               <div class="admin-macro-lbl" style="color:var(--text-faint);font-size:9px;">g</div>
-              <div class="admin-macro-lbl" style="margin-left:8px;">Gluc.</div>
+              <div class="admin-macro-lbl" style="margin-left:8px;" data-i18n="adCarb">Gluc.</div>
               <input type="number" id="admin-slot-glucides" min="0" placeholder="0"/>
               <div class="admin-macro-lbl" style="color:var(--text-faint);font-size:9px;">g</div>
-              <div class="admin-macro-lbl" style="margin-left:8px;">Lip.</div>
+              <div class="admin-macro-lbl" style="margin-left:8px;" data-i18n="adFat">Lip.</div>
               <input type="number" id="admin-slot-lipides" min="0" placeholder="0"/>
               <div class="admin-macro-lbl" style="color:var(--text-faint);font-size:9px;">g</div>
             </div>
@@ -1108,88 +1108,88 @@
 
           <!-- Ligne 5 : allergènes -->
           <div style="margin-bottom:10px;">
-            <div class="admin-field-label">Allergènes</div>
+            <div class="admin-field-label" data-i18n="adAllergens">Allergènes</div>
             <div class="allergen-grid" id="allergen-grid"></div>
           </div>
 
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <button class="btn accent2" onclick="openMenuPicker()">🍽 Appliquer un menu</button>
-            <button class="btn accent" onclick="saveSlotDesc()">💾 Sauvegarder</button>
-            <button class="btn" onclick="clearSlotDesc()">Vider la case</button>
-            <button class="btn accent3" onclick="cancelReservation()">Annuler réservation</button>
+            <button class="btn accent2" onclick="openMenuPicker()" data-i18n="adApplyMenuBtn">🍽 Appliquer un menu</button>
+            <button class="btn accent" onclick="saveSlotDesc()" data-i18n="adSaveBtn">💾 Sauvegarder</button>
+            <button class="btn" onclick="clearSlotDesc()" data-i18n="adminClear">Vider la case</button>
+            <button class="btn accent3" onclick="cancelReservation()" data-i18n="adminCancel">Annuler réservation</button>
           </div>
         </div>
       </div>
       <div class="admin-panel" id="panel-menus">
         <!-- Header -->
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid var(--border);">
-          <div class="admin-section-title" style="margin-bottom:0;padding-bottom:0;border-bottom:none;">Bibliothèque de menus</div>
-          <button class="btn accent" onclick="openMenuForm(null)" style="font-size:11px;padding:5px 12px;">+ Nouveau menu</button>
+          <div class="admin-section-title" style="margin-bottom:0;padding-bottom:0;border-bottom:none;" data-i18n="adMenuLib">Bibliothèque de menus</div>
+          <button class="btn accent" onclick="openMenuForm(null)" style="font-size:11px;padding:5px 12px;" data-i18n="adNewMenuBtn">+ Nouveau menu</button>
         </div>
         <!-- Liste des menus -->
         <div id="menu-library-list" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;"></div>
         <!-- Formulaire création/édition -->
         <div id="menu-form-wrap" style="display:none;background:var(--bg);border:1px solid var(--border-active);padding:12px;">
-          <div style="font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin-bottom:10px;" id="menu-form-title">Nouveau menu</div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin-bottom:10px;" id="menu-form-title" data-i18n="adNewMenu">Nouveau menu</div>
           <!-- Nom + prix -->
           <div style="display:flex;gap:8px;margin-bottom:6px;">
             <div style="flex:1;">
-              <div class="admin-field-label">Nom du plat / description</div>
+              <div class="admin-field-label" data-i18n="adDishName">Nom du plat / description</div>
               <textarea class="admin-field-input" id="mf-desc" rows="2" placeholder="Ex: Poulet rôti, légumes grillés, riz basmati..."></textarea>
             </div>
             <div style="width:90px;flex-shrink:0;">
-              <div class="admin-field-label">Prix ($)</div>
+              <div class="admin-field-label" data-i18n="adPriceDollar">Prix ($)</div>
               <input class="admin-field-input" type="number" id="mf-price" min="0" step="0.25" placeholder="0.00" style="width:100%;"/>
             </div>
           </div>
           <!-- Photo + chef + date -->
           <div style="display:flex;gap:8px;margin-bottom:6px;">
             <div style="flex:1;">
-              <div class="admin-field-label">Photo (nom de fichier GitHub)</div>
+              <div class="admin-field-label" data-i18n="adPhotoFile">Photo (nom de fichier GitHub)</div>
               <div style="display:flex;gap:5px;align-items:center;">
                 <input class="admin-field-input" type="text" id="mf-photo" placeholder="poulet-roti.jpg" style="flex:1;"/>
-                <button class="btn" onclick="previewMenuPhoto()" style="font-size:11px;padding:4px 8px;flex-shrink:0;">Aperçu</button>
+                <button class="btn" onclick="previewMenuPhoto()" style="font-size:11px;padding:4px 8px;flex-shrink:0;" data-i18n="adPreview">Aperçu</button>
               </div>
               <img id="mf-photo-preview" class="admin-photo-preview" src="" alt="" style="display:none;margin-top:4px;"/>
             </div>
             <div style="width:130px;flex-shrink:0;display:flex;flex-direction:column;gap:6px;">
               <div>
-                <div class="admin-field-label">Chef / cuisinier</div>
+                <div class="admin-field-label" data-i18n="adChef">Chef / cuisinier</div>
                 <input class="admin-field-input" type="text" id="mf-chef" placeholder="Prénom Nom" style="width:100%;"/>
               </div>
               <div>
-                <div class="admin-field-label" title="Si renseignee, l'onglet Statuts affichera les jours restants et encadrera la case en rouge si depassee.">Date d'expiration</div>
+                <div class="admin-field-label" title="Si renseignee, l'onglet Statuts affichera les jours restants et encadrera la case en rouge si depassee." data-i18n="adExpiry">Date d'expiration</div>
                 <input class="admin-field-input" type="date" id="mf-expdate" style="width:100%;"/>
               </div>
             </div>
           </div>
           <!-- Ingrédients -->
           <div style="margin-bottom:6px;">
-            <div class="admin-field-label">Ingrédients</div>
+            <div class="admin-field-label" data-i18n="adIngredients">Ingrédients</div>
             <textarea class="admin-field-input" id="mf-ingredients" rows="2" placeholder="Poulet (200g), huile d'olive, ail, romarin..."></textarea>
           </div>
           <!-- Macros -->
           <div style="margin-bottom:6px;">
-            <div class="admin-field-label">Valeurs nutritives (par portion)</div>
+            <div class="admin-field-label" data-i18n="adNutrition">Valeurs nutritives (par portion)</div>
             <div class="admin-macro-row">
               <div class="admin-macro-lbl">kcal</div><input type="number" id="mf-calories" min="0" placeholder="0"/>
-              <div class="admin-macro-lbl" style="margin-left:8px;">Prot.</div><input type="number" id="mf-proteines" min="0" placeholder="0"/>
+              <div class="admin-macro-lbl" style="margin-left:8px;" data-i18n="adProt">Prot.</div><input type="number" id="mf-proteines" min="0" placeholder="0"/>
               <div class="admin-macro-lbl" style="color:var(--text-faint);font-size:9px;">g</div>
-              <div class="admin-macro-lbl" style="margin-left:8px;">Gluc.</div><input type="number" id="mf-glucides" min="0" placeholder="0"/>
+              <div class="admin-macro-lbl" style="margin-left:8px;" data-i18n="adCarb">Gluc.</div><input type="number" id="mf-glucides" min="0" placeholder="0"/>
               <div class="admin-macro-lbl" style="color:var(--text-faint);font-size:9px;">g</div>
-              <div class="admin-macro-lbl" style="margin-left:8px;">Lip.</div><input type="number" id="mf-lipides" min="0" placeholder="0"/>
+              <div class="admin-macro-lbl" style="margin-left:8px;" data-i18n="adFat">Lip.</div><input type="number" id="mf-lipides" min="0" placeholder="0"/>
               <div class="admin-macro-lbl" style="color:var(--text-faint);font-size:9px;">g</div>
             </div>
           </div>
           <!-- Allergènes -->
           <div style="margin-bottom:10px;">
-            <div class="admin-field-label">Allergènes</div>
+            <div class="admin-field-label" data-i18n="adAllergens">Allergènes</div>
             <div class="allergen-grid" id="mf-allergen-grid"></div>
           </div>
           <div style="display:flex;gap:8px;">
-            <button class="btn accent" onclick="saveMenuForm()">💾 Sauvegarder le menu</button>
-            <button class="btn" onclick="closeMenuForm()">Annuler</button>
-            <button class="btn accent3" id="mf-delete-btn" onclick="deleteCurrentMenu()" style="display:none;margin-left:auto;">Supprimer</button>
+            <button class="btn accent" onclick="saveMenuForm()" data-i18n="adSaveMenu">💾 Sauvegarder le menu</button>
+            <button class="btn" onclick="closeMenuForm()" data-i18n="adCancelBtn">Annuler</button>
+            <button class="btn accent3" id="mf-delete-btn" onclick="deleteCurrentMenu()" style="display:none;margin-left:auto;" data-i18n="adDelete">Supprimer</button>
           </div>
         </div>
       </div>
@@ -1198,12 +1198,12 @@
       <div class="modal-overlay" id="menu-picker-modal">
         <div class="modal" style="width:420px;max-height:360px;">
           <div class="modal-header">
-            <div class="modal-title">Choisir un menu</div>
+            <div class="modal-title" data-i18n="adPickMenu">Choisir un menu</div>
             <div class="modal-slot-num" id="menu-picker-slot-label"></div>
           </div>
           <div class="modal-body" id="menu-picker-body" style="gap:6px;"></div>
           <div class="modal-footer">
-            <button class="btn" onclick="closeMenuPicker()">Annuler</button>
+            <button class="btn" onclick="closeMenuPicker()" data-i18n="adCancelBtn">Annuler</button>
           </div>
         </div>
       </div>
@@ -1214,61 +1214,61 @@
         <button class="btn accent admin-save-btn" data-i18n="adminApply" onclick="saveTemperatures()">Appliquer</button>
       </div>
       <div class="admin-panel" id="panel-config">
-        <div class="admin-section-title">Configuration des sections</div>
+        <div class="admin-section-title" data-i18n="adminConfigTitle">Configuration des sections</div>
         <div id="config-section-rows"></div>
-        <button class="btn accent admin-save-btn" onclick="saveConfig()">Appliquer & Reconfigurer</button>
-        <div style="margin-top:12px;" class="admin-section-title">Robot (mode automatique)</div>
+        <button class="btn accent admin-save-btn" onclick="saveConfig()" data-i18n="adminConfigApply">Appliquer & Reconfigurer</button>
+        <div style="margin-top:12px;" class="admin-section-title" data-i18n="adRobotAuto">Robot (mode automatique)</div>
         <div class="admin-row">
-          <div class="admin-label">Vitesse auto</div>
+          <div class="admin-label" data-i18n="adAutoSpeed">Vitesse auto</div>
           <input type="range" id="gantry-auto-speed" min="1" max="10" step="1" value="5" style="width:180px;accent-color:var(--accent);" oninput="updateAutoSpeed(this.value)">
           <span id="gantry-auto-speed-val" class="admin-unit" style="font-family:'Space Mono',monospace;color:var(--accent);min-width:18px;text-align:right;">5</span>
         </div>
-        <div style="font-size:10px;color:var(--text-faint);margin:-4px 0 12px 140px;">1 = lent et doux · 5 = equilibre · 10 = rapide et nerveux</div>
-        <div style="margin-top:12px;" class="admin-section-title">Boîtes réutilisables</div>
+        <div style="font-size:10px;color:var(--text-faint);margin:-4px 0 12px 140px;" data-i18n="adSpeedHint">1 = lent et doux · 5 = equilibre · 10 = rapide et nerveux</div>
+        <div style="margin-top:12px;" class="admin-section-title" data-i18n="adBoxesTitle">Boîtes réutilisables</div>
         <div class="admin-row">
-          <div class="admin-label">Maximum de boîtes</div>
+          <div class="admin-label" data-i18n="adBoxMax">Maximum de boîtes</div>
           <input class="admin-input" type="number" id="box-max-input" min="0" max="500" style="width:70px;">
-          <div class="admin-unit">boîtes</div>
+          <div class="admin-unit" data-i18n="boxesUnit">boîtes</div>
         </div>
         <div class="admin-row">
-          <div class="admin-label">Boîtes actuellement</div>
+          <div class="admin-label" data-i18n="adBoxNow">Boîtes actuellement</div>
           <input class="admin-input" type="number" id="box-count-input" min="0" max="500" style="width:70px;">
-          <div class="admin-unit">boîtes</div>
+          <div class="admin-unit" data-i18n="boxesUnit">boîtes</div>
         </div>
         <button class="btn accent" style="margin-bottom:12px;" onclick="saveBoxConfig()">Appliquer</button>
-        <div style="margin-top:12px;" class="admin-section-title">GitHub — Upload photos</div>
-        <div style="font-size:10px;color:var(--text-faint);margin-bottom:8px;line-height:1.5;">Token PAT avec permission <code style="color:var(--accent2);">contents:write</code> sur le repo <code style="color:var(--accent);">LunchMachine-images</code>.<br>Générer sur github.com → Settings → Developer settings → Personal access tokens.</div>
+        <div style="margin-top:12px;" class="admin-section-title" data-i18n="adGithubTitle">GitHub — Upload photos</div>
+        <div data-i18n="adTokenPerm" data-i18n-html="1" style="font-size:10px;color:var(--text-faint);margin-bottom:8px;line-height:1.5;">Token PAT avec permission <code style="color:var(--accent2);">contents:write</code> sur le repo <code style="color:var(--accent);">LunchMachine-images</code>.<br>Générer sur github.com → Settings → Developer settings → Personal access tokens.</div>
         <div class="admin-row">
-          <div class="admin-label">Token PAT</div>
+          <div class="admin-label" data-i18n="adTokenLabel">Token PAT</div>
           <input class="admin-input" type="password" id="github-token-input" style="width:180px;font-size:10px;" placeholder="ghp_xxxxxxxxxxxx">
-          <button class="btn" onclick="saveGitHubToken()">Sauver</button>
+          <button class="btn" onclick="saveGitHubToken()" data-i18n="adSaveShort">Sauver</button>
         </div>
         <div id="github-token-status" style="font-family:'Space Mono',monospace;font-size:10px;color:var(--text-faint);margin-left:140px;margin-bottom:8px;"></div>
-        <div class="admin-section-title">Sécurité</div>
+        <div class="admin-section-title" data-i18n="adminSecurity">Sécurité</div>
         <div class="admin-row">
-          <div class="admin-label">Code PIN admin</div>
+          <div class="admin-label" data-i18n="adminPinLabel">Code PIN admin</div>
           <input class="admin-input" type="password" id="new-pin" maxlength="4" style="width:80px;">
-          <button class="btn" onclick="savePin()">Changer</button>
+          <button class="btn" onclick="savePin()" data-i18n="adminPinChange">Changer</button>
         </div>
       </div>
       <div class="admin-panel" id="panel-gantry">
         <!-- COL GAUCHE : contrôles -->
         <div class="gantry-controls-col">
-          <div class="admin-section-title" style="margin-bottom:10px;">Contrôle Gantry</div>
+          <div class="admin-section-title" style="margin-bottom:10px;" data-i18n="adGantryTitle">Contrôle Gantry</div>
 
           <!-- Mode toggle -->
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;padding:8px;background:var(--bg);border:1px solid var(--border);">
-            <button id="gantry-mode-auto" onclick="setGantryMode('auto')" class="btn accent" style="font-size:11px;padding:4px 10px;">⚙ AUTO</button>
-            <button id="gantry-mode-manual" onclick="setGantryMode('manual')" class="btn" style="font-size:11px;padding:4px 10px;">✋ MANUEL</button>
+            <button id="gantry-mode-auto" onclick="setGantryMode('auto')" class="btn accent" style="font-size:11px;padding:4px 10px;" data-i18n="adModeAuto">⚙ AUTO</button>
+            <button id="gantry-mode-manual" onclick="setGantryMode('manual')" class="btn" style="font-size:11px;padding:4px 10px;" data-i18n="adModeManual">✋ MANUEL</button>
             <div id="gantry-mode-label" style="font-family:'Space Mono',monospace;font-size:10px;color:var(--accent);">AUTO</div>
           </div>
 
           <!-- État -->
           <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;padding:7px;background:var(--bg);border:1px solid var(--border);">
-            <div><div style="font-size:9px;color:var(--text-faint);font-family:'Barlow Condensed',sans-serif;letter-spacing:.08em;text-transform:uppercase;">Phase</div><div id="gm-phase" style="font-family:'Space Mono',monospace;font-size:11px;color:var(--accent);">—</div></div>
+            <div><div style="font-size:9px;color:var(--text-faint);font-family:'Barlow Condensed',sans-serif;letter-spacing:.08em;text-transform:uppercase;" data-i18n="adPhase">Phase</div><div id="gm-phase" style="font-family:'Space Mono',monospace;font-size:11px;color:var(--accent);">—</div></div>
             <div><div style="font-size:9px;color:var(--text-faint);font-family:'Barlow Condensed',sans-serif;letter-spacing:.08em;text-transform:uppercase;">X</div><div id="gm-x" style="font-family:'Space Mono',monospace;font-size:11px;color:var(--text);">—</div></div>
             <div><div style="font-size:9px;color:var(--text-faint);font-family:'Barlow Condensed',sans-serif;letter-spacing:.08em;text-transform:uppercase;">Z</div><div id="gm-z" style="font-family:'Space Mono',monospace;font-size:11px;color:var(--text);">—</div></div>
-            <div><div style="font-size:9px;color:var(--text-faint);font-family:'Barlow Condensed',sans-serif;letter-spacing:.08em;text-transform:uppercase;">Charge</div><div id="gm-carry" style="font-family:'Space Mono',monospace;font-size:11px;">—</div></div>
+            <div><div style="font-size:9px;color:var(--text-faint);font-family:'Barlow Condensed',sans-serif;letter-spacing:.08em;text-transform:uppercase;" data-i18n="adLoad">Charge</div><div id="gm-carry" style="font-family:'Space Mono',monospace;font-size:11px;">—</div></div>
           </div>
 
           <!-- Contrôle manuel -->
@@ -1277,7 +1277,7 @@
             <div style="display:flex;gap:14px;align-items:flex-start;margin-bottom:10px;">
               <!-- Joypad -->
               <div>
-                <div style="font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text-faint);margin-bottom:5px;">DÉPLACEMENT</div>
+                <div style="font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text-faint);margin-bottom:5px;" data-i18n="adMove">DÉPLACEMENT</div>
                 <div class="joypad">
                   <div></div>
                   <button class="joypad-btn" id="jbtn-up"    onpointerdown="startManualMove('up')"    onpointerup="stopManualMove()" onpointerleave="stopManualMove()">▲</button>
@@ -1291,35 +1291,35 @@
                 </div>
                 <!-- Vitesse -->
                 <div style="display:flex;align-items:center;gap:6px;margin-top:6px;">
-                  <span style="font-size:9px;color:var(--text-faint);font-family:'Barlow Condensed',sans-serif;letter-spacing:.06em;text-transform:uppercase;">Vitesse</span>
+                  <span style="font-size:9px;color:var(--text-faint);font-family:'Barlow Condensed',sans-serif;letter-spacing:.06em;text-transform:uppercase;" data-i18n="adSpeed">Vitesse</span>
                   <input type="range" id="gantry-speed" min="1" max="10" value="5" style="flex:1;accent-color:var(--accent);" oninput="updateManualSpeed(this.value)">
                   <span id="gantry-speed-val" style="font-family:'Space Mono',monospace;font-size:10px;color:var(--accent);width:14px;">5</span>
                 </div>
               </div>
               <!-- Actions -->
               <div style="display:flex;flex-direction:column;gap:5px;">
-                <div style="font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text-faint);margin-bottom:2px;">ACTIONS</div>
-                <button class="btn accent"  onclick="manualGrab()"          style="font-size:11px;padding:5px 10px;">⟳ SAISIR</button>
-                <button class="btn"         onclick="manualRelease()"        style="font-size:11px;padding:5px 10px;">⬇ DÉPOSER</button>
-                <button class="btn accent2" onclick="manualHome()"           style="font-size:11px;padding:5px 10px;">⌂ HOME</button>
-                <button class="btn accent3" onclick="manualEmergencyStop()"  style="font-size:11px;padding:5px 10px;background:rgba(232,80,71,.12);">⛔ STOP</button>
+                <div style="font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text-faint);margin-bottom:2px;" data-i18n="adActions">ACTIONS</div>
+                <button class="btn accent"  onclick="manualGrab()"          style="font-size:11px;padding:5px 10px;" data-i18n="adGrab">⟳ SAISIR</button>
+                <button class="btn"         onclick="manualRelease()"        style="font-size:11px;padding:5px 10px;" data-i18n="adDrop">⬇ DÉPOSER</button>
+                <button class="btn accent2" onclick="manualHome()"           style="font-size:11px;padding:5px 10px;" data-i18n="adHomeBtn">⌂ HOME</button>
+                <button class="btn accent3" onclick="manualEmergencyStop()"  style="font-size:11px;padding:5px 10px;background:rgba(232,80,71,.12);" data-i18n="adStop">⛔ STOP</button>
               </div>
             </div>
 
             <!-- Positions rapides -->
-            <div style="font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text-faint);margin-bottom:5px;">POSITIONS RAPIDES</div>
+            <div style="font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text-faint);margin-bottom:5px;" data-i18n="adQuickPos">POSITIONS RAPIDES</div>
             <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px;">
-              <button class="btn" onclick="manualGoto(0.02,0)"    style="font-size:10px;padding:4px 8px;">⌂ Repos</button>
-              <button class="btn" onclick="manualGoto(0.268,null)" style="font-size:10px;padding:4px 8px;">📦 Pickup</button>
+              <button class="btn" onclick="manualGoto(0.02,0)"    style="font-size:10px;padding:4px 8px;" data-i18n="adPosHome">⌂ Repos</button>
+              <button class="btn" onclick="manualGoto(0.268,null)" style="font-size:10px;padding:4px 8px;" data-i18n="adPosPickup">📦 Pickup</button>
               <button class="btn" onclick="manualGoto(0.551,null)" style="font-size:10px;padding:4px 8px;">Z1</button>
               <button class="btn" onclick="manualGoto(0.849,null)" style="font-size:10px;padding:4px 8px;">Z2</button>
             </div>
           </div>
 
           <!-- File d'attente -->
-          <div style="font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text-faint);margin-bottom:4px;">FILE D'ATTENTE</div>
-          <div id="gantry-queue-list" style="font-family:'Space Mono',monospace;font-size:10px;color:var(--text-dim);min-height:18px;padding:5px;background:var(--bg);border:1px solid var(--border);white-space:pre-line;">Vide</div>
-          <button class="btn accent3" onclick="clearGantryQueue()" style="font-size:10px;padding:3px 8px;margin-top:5px;">Vider la file</button>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text-faint);margin-bottom:4px;" data-i18n="adQueue">FILE D'ATTENTE</div>
+          <div id="gantry-queue-list" style="font-family:'Space Mono',monospace;font-size:10px;color:var(--text-dim);min-height:18px;padding:5px;background:var(--bg);border:1px solid var(--border);white-space:pre-line;" data-i18n="slotEmpty">Vide</div>
+          <button class="btn accent3" onclick="clearGantryQueue()" style="font-size:10px;padding:3px 8px;margin-top:5px;" data-i18n="adClearQueue">Vider la file</button>
         </div>
 
         <!-- COL DROITE : preview live gantry -->
@@ -1332,7 +1332,7 @@
       </div>
 
       <div class="admin-panel" id="panel-status">
-        <div class="admin-section-title">Vue d'ensemble</div>
+        <div class="admin-section-title" data-i18n="adminStatusTitle">Vue d'ensemble</div>
         <div id="status-content"></div>
       </div>
     </div>
@@ -1600,6 +1600,76 @@ const LANGS = {
     demoPinHint: (code) => `Mode démo — le code est ${code}`,
     demoHint: 'Mode démo : aucun achat réel. Profil, dépendants et soldes fictifs.',
     boxesUnit: 'boîtes',
+    adMenus: "Menus",
+    adNavGantry: "Gantry",
+    adMultiSelect: "☐ Sélection multiple",
+    adNoMenu: "Aucun menu créé. Touchez « + Nouveau menu » pour commencer.",
+    band_blue: "Bleu",
+    band_violet: "Violet",
+    band_orange: "Orange",
+    band_red: "Rouge",
+    adTargetSetpoint: "Consigne cible",
+    adMultiSelectOn: "☑ Sélection multiple",
+    adSelectedCount: (n) => `${n} case${n > 1 ? 's' : ''}`,
+    adApplyMenu: "➤ Appliquer menu",
+    adClearAll: "⚠ Vider toutes les cases",
+    adConfirm: "Confirmer ?",
+    adYesClear: "✓ Oui, vider",
+    adNo: "✕ Non",
+    adDishName: "Nom du plat / description",
+    adPriceDollar: "Prix ($)",
+    adDishPhoto: "Photo du plat",
+    adTakePhoto: "📷 Prendre une photo ou choisir un fichier",
+    adPhotoHint: "JPG, PNG — sera uploadé sur GitHub",
+    adOrFilename: "— OU entrer le nom de fichier —",
+    adPreview: "Aperçu",
+    adChef: "Chef / cuisinier",
+    adPrepDate: "Date de préparation",
+    adIngredientsFull: "Ingrédients (liste complète pour traçabilité)",
+    adNutrition: "Valeurs nutritives (par portion)",
+    adProt: "Prot.",
+    adCarb: "Gluc.",
+    adFat: "Lip.",
+    adAllergens: "Allergènes",
+    adApplyMenuBtn: "🍽 Appliquer un menu",
+    adSaveBtn: "💾 Sauvegarder",
+    adMenuLib: "Bibliothèque de menus",
+    adNewMenuBtn: "+ Nouveau menu",
+    adNewMenu: "Nouveau menu",
+    adPhotoFile: "Photo (nom de fichier GitHub)",
+    adExpiry: "Date d'expiration",
+    adIngredients: "Ingrédients",
+    adSaveMenu: "💾 Sauvegarder le menu",
+    adCancelBtn: "Annuler",
+    adDelete: "Supprimer",
+    adPickMenu: "Choisir un menu",
+    adRobotAuto: "Robot (mode automatique)",
+    adAutoSpeed: "Vitesse auto",
+    adSpeedHint: "1 = lent et doux · 5 = equilibre · 10 = rapide et nerveux",
+    adBoxesTitle: "Boîtes réutilisables",
+    adBoxMax: "Maximum de boîtes",
+    adBoxNow: "Boîtes actuellement",
+    adGithubTitle: "GitHub — Upload photos",
+    adTokenLabel: "Token PAT",
+    adSaveShort: "Sauver",
+    adGantryTitle: "Contrôle Gantry",
+    adModeAuto: "⚙ AUTO",
+    adModeManual: "✋ MANUEL",
+    adPhase: "Phase",
+    adLoad: "Charge",
+    adMove: "DÉPLACEMENT",
+    adSpeed: "Vitesse",
+    adActions: "ACTIONS",
+    adGrab: "⟳ SAISIR",
+    adDrop: "⬇ DÉPOSER",
+    adHomeBtn: "⌂ HOME",
+    adStop: "⛔ STOP",
+    adQuickPos: "POSITIONS RAPIDES",
+    adPosHome: "⌂ Repos",
+    adPosPickup: "📦 Pickup",
+    adQueue: "FILE D'ATTENTE",
+    adClearQueue: "Vider la file",
+    adTokenPerm: "Token PAT avec permission <code style=\"color:var(--accent2);\">contents:write</code> sur le repo <code style=\"color:var(--accent);\">LunchMachine-images</code>.<br>Générer sur github.com → Settings → Developer settings → Personal access tokens.",
     pickupWaiting: 'EN ATTENTE',
     lunchDone: "J'ai terminé ✓",
     pickupCancel: '✕ ANNULER — REMETTRE EN PLACE',
@@ -1702,6 +1772,76 @@ const LANGS = {
     demoPinHint: (code) => `Demo mode — the code is ${code}`,
     demoHint: 'Demo mode: no real purchase. Fictional profile, dependants and balances.',
     boxesUnit: 'boxes',
+    adMenus: "Menus",
+    adNavGantry: "Gantry",
+    adMultiSelect: "☐ Multi-select",
+    adNoMenu: "No menu created yet. Tap “+ New menu” to start.",
+    band_blue: "Blue",
+    band_violet: "Purple",
+    band_orange: "Orange",
+    band_red: "Red",
+    adTargetSetpoint: "Target setpoint",
+    adMultiSelectOn: "☑ Multi-select",
+    adSelectedCount: (n) => `${n} slot${n > 1 ? 's' : ''}`,
+    adApplyMenu: "➤ Apply menu",
+    adClearAll: "⚠ Clear every slot",
+    adConfirm: "Confirm?",
+    adYesClear: "✓ Yes, clear",
+    adNo: "✕ No",
+    adDishName: "Dish name / description",
+    adPriceDollar: "Price ($)",
+    adDishPhoto: "Dish photo",
+    adTakePhoto: "📷 Take a photo or choose a file",
+    adPhotoHint: "JPG, PNG — will be uploaded to GitHub",
+    adOrFilename: "— OR enter the file name —",
+    adPreview: "Preview",
+    adChef: "Chef / cook",
+    adPrepDate: "Preparation date",
+    adIngredientsFull: "Ingredients (full list for traceability)",
+    adNutrition: "Nutrition facts (per serving)",
+    adProt: "Prot.",
+    adCarb: "Carbs",
+    adFat: "Fat",
+    adAllergens: "Allergens",
+    adApplyMenuBtn: "🍽 Apply a menu",
+    adSaveBtn: "💾 Save",
+    adMenuLib: "Menu library",
+    adNewMenuBtn: "+ New menu",
+    adNewMenu: "New menu",
+    adPhotoFile: "Photo (GitHub file name)",
+    adExpiry: "Expiry date",
+    adIngredients: "Ingredients",
+    adSaveMenu: "💾 Save the menu",
+    adCancelBtn: "Cancel",
+    adDelete: "Delete",
+    adPickMenu: "Choose a menu",
+    adRobotAuto: "Robot (automatic mode)",
+    adAutoSpeed: "Auto speed",
+    adSpeedHint: "1 = slow and gentle · 5 = balanced · 10 = fast and sharp",
+    adBoxesTitle: "Reusable boxes",
+    adBoxMax: "Maximum boxes",
+    adBoxNow: "Boxes on hand",
+    adGithubTitle: "GitHub — Photo upload",
+    adTokenLabel: "PAT token",
+    adSaveShort: "Save",
+    adGantryTitle: "Gantry control",
+    adModeAuto: "⚙ AUTO",
+    adModeManual: "✋ MANUAL",
+    adPhase: "Phase",
+    adLoad: "Load",
+    adMove: "MOVEMENT",
+    adSpeed: "Speed",
+    adActions: "ACTIONS",
+    adGrab: "⟳ GRAB",
+    adDrop: "⬇ DROP",
+    adHomeBtn: "⌂ HOME",
+    adStop: "⛔ STOP",
+    adQuickPos: "QUICK POSITIONS",
+    adPosHome: "⌂ Home",
+    adPosPickup: "📦 Pickup",
+    adQueue: "QUEUE",
+    adClearQueue: "Clear the queue",
+    adTokenPerm: "PAT token with <code style=\"color:var(--accent2);\">contents:write</code> permission on the <code style=\"color:var(--accent);\">LunchMachine-images</code> repo.<br>Generate at github.com → Settings → Developer settings → Personal access tokens.",
     pickupWaiting: 'WAITING',
     lunchDone: "I'm done ✓",
     pickupCancel: '✕ CANCEL — PUT IT BACK',
@@ -1788,6 +1928,76 @@ const LANGS = {
     demoPinHint: (code) => `Modo demo — el código es ${code}`,
     demoHint: 'Modo demo: ninguna compra real. Perfil, dependientes y saldos ficticios.',
     boxesUnit: 'cajas',
+    adMenus: "Menús",
+    adNavGantry: "Gantry",
+    adMultiSelect: "☐ Selección múltiple",
+    adNoMenu: "Ningún menú creado. Toque «+ Nuevo menú» para empezar.",
+    band_blue: "Azul",
+    band_violet: "Violeta",
+    band_orange: "Naranja",
+    band_red: "Rojo",
+    adTargetSetpoint: "Consigna objetivo",
+    adMultiSelectOn: "☑ Selección múltiple",
+    adSelectedCount: (n) => `${n} cajón${n > 1 ? 'es' : ''}`,
+    adApplyMenu: "➤ Aplicar menú",
+    adClearAll: "⚠ Vaciar todos los casilleros",
+    adConfirm: "¿Confirmar?",
+    adYesClear: "✓ Sí, vaciar",
+    adNo: "✕ No",
+    adDishName: "Nombre del plato / descripción",
+    adPriceDollar: "Precio ($)",
+    adDishPhoto: "Foto del plato",
+    adTakePhoto: "📷 Tomar una foto o elegir un archivo",
+    adPhotoHint: "JPG, PNG — se subirá a GitHub",
+    adOrFilename: "— O escribir el nombre del archivo —",
+    adPreview: "Vista previa",
+    adChef: "Chef / cocinero",
+    adPrepDate: "Fecha de preparación",
+    adIngredientsFull: "Ingredientes (lista completa para trazabilidad)",
+    adNutrition: "Valores nutricionales (por porción)",
+    adProt: "Prot.",
+    adCarb: "Hidr.",
+    adFat: "Grasas",
+    adAllergens: "Alérgenos",
+    adApplyMenuBtn: "🍽 Aplicar un menú",
+    adSaveBtn: "💾 Guardar",
+    adMenuLib: "Biblioteca de menús",
+    adNewMenuBtn: "+ Nuevo menú",
+    adNewMenu: "Nuevo menú",
+    adPhotoFile: "Foto (nombre de archivo GitHub)",
+    adExpiry: "Fecha de caducidad",
+    adIngredients: "Ingredientes",
+    adSaveMenu: "💾 Guardar el menú",
+    adCancelBtn: "Cancelar",
+    adDelete: "Eliminar",
+    adPickMenu: "Elegir un menú",
+    adRobotAuto: "Robot (modo automático)",
+    adAutoSpeed: "Velocidad automática",
+    adSpeedHint: "1 = lento y suave · 5 = equilibrado · 10 = rápido y nervioso",
+    adBoxesTitle: "Cajas reutilizables",
+    adBoxMax: "Máximo de cajas",
+    adBoxNow: "Cajas actualmente",
+    adGithubTitle: "GitHub — Subida de fotos",
+    adTokenLabel: "Token PAT",
+    adSaveShort: "Guardar",
+    adGantryTitle: "Control del pórtico",
+    adModeAuto: "⚙ AUTO",
+    adModeManual: "✋ MANUAL",
+    adPhase: "Fase",
+    adLoad: "Carga",
+    adMove: "DESPLAZAMIENTO",
+    adSpeed: "Velocidad",
+    adActions: "ACCIONES",
+    adGrab: "⟳ AGARRAR",
+    adDrop: "⬇ SOLTAR",
+    adHomeBtn: "⌂ HOME",
+    adStop: "⛔ PARAR",
+    adQuickPos: "POSICIONES RÁPIDAS",
+    adPosHome: "⌂ Reposo",
+    adPosPickup: "📦 Recogida",
+    adQueue: "COLA",
+    adClearQueue: "Vaciar la cola",
+    adTokenPerm: "Token PAT con permiso <code style=\"color:var(--accent2);\">contents:write</code> en el repo <code style=\"color:var(--accent);\">LunchMachine-images</code>.<br>Generar en github.com → Settings → Developer settings → Personal access tokens.",
     pickupWaiting: 'EN ESPERA',
     lunchDone: 'He terminado ✓',
     pickupCancel: '✕ ANULAR — DEVOLVER A SU SITIO',
@@ -1873,6 +2083,76 @@ const LANGS = {
     demoPinHint: (code) => `演示模式 — 密码为 ${code}`,
     demoHint: '演示模式：不产生任何真实交易。资料、家属与余额均为虚构。',
     boxesUnit: '个餐盒',
+    adMenus: "菜单",
+    adNavGantry: "桁架",
+    adMultiSelect: "☐ 多选",
+    adNoMenu: "尚未创建任何菜单。点击「+ 新建菜单」开始。",
+    band_blue: "蓝",
+    band_violet: "紫",
+    band_orange: "橙",
+    band_red: "红",
+    adTargetSetpoint: "目标设定值",
+    adMultiSelectOn: "☑ 多选",
+    adSelectedCount: (n) => `${n} 个格位`,
+    adApplyMenu: "➤ 应用菜单",
+    adClearAll: "⚠ 清空所有格位",
+    adConfirm: "确认？",
+    adYesClear: "✓ 是，清空",
+    adNo: "✕ 否",
+    adDishName: "菜品名称／说明",
+    adPriceDollar: "价格（$）",
+    adDishPhoto: "菜品照片",
+    adTakePhoto: "📷 拍照或选择文件",
+    adPhotoHint: "JPG、PNG — 将上传至 GitHub",
+    adOrFilename: "— 或输入文件名 —",
+    adPreview: "预览",
+    adChef: "厨师",
+    adPrepDate: "制作日期",
+    adIngredientsFull: "配料（可追溯的完整清单）",
+    adNutrition: "营养成分（每份）",
+    adProt: "蛋白",
+    adCarb: "碳水",
+    adFat: "脂肪",
+    adAllergens: "过敏原",
+    adApplyMenuBtn: "🍽 应用菜单",
+    adSaveBtn: "💾 保存",
+    adMenuLib: "菜单库",
+    adNewMenuBtn: "+ 新建菜单",
+    adNewMenu: "新建菜单",
+    adPhotoFile: "照片（GitHub 文件名）",
+    adExpiry: "保质期",
+    adIngredients: "配料",
+    adSaveMenu: "💾 保存菜单",
+    adCancelBtn: "取消",
+    adDelete: "删除",
+    adPickMenu: "选择菜单",
+    adRobotAuto: "机器人（自动模式）",
+    adAutoSpeed: "自动速度",
+    adSpeedHint: "1 = 缓慢柔和 · 5 = 均衡 · 10 = 快速利落",
+    adBoxesTitle: "可重复使用的餐盒",
+    adBoxMax: "餐盒上限",
+    adBoxNow: "当前餐盒数",
+    adGithubTitle: "GitHub — 照片上传",
+    adTokenLabel: "PAT 令牌",
+    adSaveShort: "保存",
+    adGantryTitle: "桁架控制",
+    adModeAuto: "⚙ 自动",
+    adModeManual: "✋ 手动",
+    adPhase: "阶段",
+    adLoad: "载荷",
+    adMove: "移动",
+    adSpeed: "速度",
+    adActions: "操作",
+    adGrab: "⟳ 抓取",
+    adDrop: "⬇ 放下",
+    adHomeBtn: "⌂ 归位",
+    adStop: "⛔ 停止",
+    adQuickPos: "快捷位置",
+    adPosHome: "⌂ 待机",
+    adPosPickup: "📦 取餐",
+    adQueue: "队列",
+    adClearQueue: "清空队列",
+    adTokenPerm: "具备 <code style=\"color:var(--accent2);\">contents:write</code> 权限的 PAT 令牌，用于 <code style=\"color:var(--accent);\">LunchMachine-images</code> 仓库。<br>在 github.com → Settings → Developer settings → Personal access tokens 中生成。",
     pickupWaiting: '等待中',
     lunchDone: '我取完了 ✓',
     pickupCancel: '✕ 取消 — 放回原处',
@@ -2194,7 +2474,7 @@ function renderLangBtns() {
     }).join('');
   }
   // Update centered topbar titles
-  var pairs = [['tth-main','tth-sub'],['ttg-main','ttg-sub'],['ttp-main','ttp-sub']];
+  var pairs = [['tth-main','tth-sub'],['ttg-main','ttg-sub'],['ttp-main','ttp-sub'],['tta-main','tta-sub']];
   pairs.forEach(function(p) {
     var m = document.getElementById(p[0]);
     var s = document.getElementById(p[1]);
@@ -4259,7 +4539,7 @@ function renderAdminGantry() {
     if(gc) { gc.textContent = window.G.carrying ? '● OUI' : '○ NON'; gc.style.color = window.G.carrying ? '#5de88c' : '#888'; }
     if(badge) { badge.textContent = _gantryMode === 'manual' ? '✋ MANUEL' : '⚙ AUTO'; badge.style.color = _gantryMode === 'manual' ? '#e89847' : 'var(--accent)'; }
     var q = window.gantryQueue || [];
-    if(ql) ql.textContent = q.length ? q.map(function(j,i){ return (i+1)+'. Case #'+j.slotId+(j.desc?' — '+j.desc.substring(0,18):''); }).join('\n') : 'Vide';
+    if(ql) ql.textContent = q.length ? q.map(function(j,i){ return (i+1)+'. Case #'+j.slotId+(j.desc?' — '+j.desc.substring(0,18):''); }).join('\n') : t('slotEmpty');
   }, 250);
 }
 
@@ -4295,7 +4575,7 @@ function renderMenuLibrary() {
   const menus = getMenus();
   list.innerHTML = '';
   if(!menus.length) {
-    list.innerHTML = '<div style="font-size:12px;color:var(--text-faint);padding:10px 0;">Aucun menu créé. Cliquez sur "+ Nouveau menu" pour commencer.</div>';
+    list.innerHTML = '<div style="font-size:12px;color:var(--text-faint);padding:10px 0;">' + t('adNoMenu') + '</div>';
     return;
   }
   menus.forEach(function(m) {
@@ -4627,14 +4907,14 @@ function updateMultiSelectUI() {
   var apply = document.getElementById('multi-apply-btn');
   var clr   = document.getElementById('multi-clear-btn');
   if(btn) {
-    btn.textContent = adminMultiSelectMode ? '☑ Sélection multiple' : '☐ Sélection multiple';
+    btn.textContent = adminMultiSelectMode ? t('adMultiSelectOn') : t('adMultiSelect');
     btn.className = 'btn' + (adminMultiSelectMode ? ' accent2' : '');
     btn.style.fontSize = '11px';
     btn.style.padding  = '5px 10px';
   }
   var n = adminMultiSelectedSlots.size;
   var show = adminMultiSelectMode;
-  if(count) { count.style.display = show ? '' : 'none'; count.textContent = n + ' case' + (n>1?'s':''); }
+  if(count) { count.style.display = show ? '' : 'none'; count.textContent = t('adSelectedCount', n); }
   if(apply) { apply.style.display = show && n > 0 ? '' : 'none'; }
   if(clr)   { clr.style.display   = show && n > 0 ? '' : 'none'; }
 }
@@ -4738,7 +5018,7 @@ function renderAdminCases() {
       const isSingle = !adminMultiSelectMode && adminSelectedSlot === slot.id;
       div.className = 'admin-slot' + (isSingle || isMulti ? ' selected' : '');
       if(isMulti) div.style.outline = '2px solid var(--accent2)';
-      const status = slot.desc ? 'OK' : 'Vide';
+      const status = slot.desc ? 'OK' : t('slotEmpty');
       const statusColor = slot.desc ? 'var(--success)' : 'var(--text-faint)';
       const bar = document.createElement('div');
       bar.style.cssText = 'position:absolute;bottom:0;left:0;right:0;height:3px;background:' + color + '66;';
@@ -5044,7 +5324,7 @@ function renderAdminTemps() {
       ${COLOR_BANDS.map(function(b){
         return '<div class="admin-row" style="margin-bottom:6px;">'
           + '<div style="width:9px;height:9px;border-radius:50%;background:'+b.hex+';flex-shrink:0;box-shadow:0 0 5px '+b.hex+'88;"></div>'
-          + '<div class="admin-label" style="width:52px;color:'+b.hex+';font-size:11px;font-weight:700;">'+b.label+'</div>'
+          + '<div class="admin-label" style="width:52px;color:'+b.hex+';font-size:11px;font-weight:700;">'+t('band_'+b.key)+'</div>'
           + '<input class="admin-input" type="number" id="range-'+b.key+'-min" value="'+(ranges[b.key]?.min??'')+'" min="-30" max="200" step="0.5" style="width:58px;" placeholder="min">'
           + '<div class="admin-unit" style="color:var(--text-dim);">&#8594;</div>'
           + '<input class="admin-input" type="number" id="range-'+b.key+'-max" value="'+(ranges[b.key]?.max??'')+'" min="-30" max="200" step="0.5" style="width:58px;" placeholder="max">'
@@ -5066,7 +5346,7 @@ function renderAdminTemps() {
         <span style="font-family:'Space Mono',monospace;font-size:10px;color:var(--text-faint);">actuel: <span style="color:${color}">${(z.actual??z.setpoint).toFixed(1)}°C</span></span>
       </div>
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">
-        <div class="admin-label" style="width:80px;font-size:11px;">Consigne cible</div>
+        <div class="admin-label" style="width:80px;font-size:11px;">${t('adTargetSetpoint')}</div>
         <input class="admin-input" type="number" id="setpoint-${id}" value="${z.setpoint}" min="-30" max="200" step="0.5" style="width:58px;">
         <div class="admin-unit">°C</div>
         <div class="admin-label" style="width:80px;margin-left:8px;font-size:11px;">${t('adminTempActual')}</div>
@@ -5134,7 +5414,7 @@ function renderAdminConfig() {
     if(!z) return;
     const color = zoneColor(z);
     el.innerHTML += `<div class="admin-row">
-      <div class="admin-label"><span style="display:inline-flex;align-items:center;gap:4px;padding:2px 7px;font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;background:${color}22;color:${color};border:1px solid ${color}55;">${z.name}</span> — cases</div>
+      <div class="admin-label"><span style="display:inline-flex;align-items:center;gap:4px;padding:2px 7px;font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;background:${color}22;color:${color};border:1px solid ${color}55;">${z.name}</span> — ${t('navCases').toLowerCase()}</div>
       <input class="admin-input" type="number" id="count-${id}" value="${z.count}" min="1" max="12">
     </div>`;
   });
