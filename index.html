@@ -85,6 +85,22 @@
   .topbar-btn:hover { border-color:var(--accent); color:var(--accent); }
   .topbar-btn.danger { border-color:var(--accent3); color:var(--accent3); }
   .lang-btn { display:flex; align-items:center; gap:5px; }
+  .lang-caret { font-size:9px; opacity:.6; margin-left:1px; }
+  .lang-menu {
+    display:none; position:absolute; top:calc(100% + 4px); left:0; min-width:150px;
+    background:var(--surface); border:1px solid var(--border);
+    box-shadow:0 8px 24px rgba(0,0,0,.5); padding:4px; z-index:200;
+  }
+  .lang-menu.open { display:block; }
+  .lang-item {
+    display:flex; align-items:center; gap:7px; width:100%; text-align:left;
+    background:none; border:none; color:var(--text-dim);
+    font-family:'Barlow Condensed',sans-serif; font-size:13px; font-weight:600;
+    letter-spacing:.05em; text-transform:uppercase; padding:6px 9px;
+    cursor:pointer; white-space:nowrap;
+  }
+  .lang-item:hover { background:rgba(255,255,255,.06); color:var(--accent); }
+  .lang-item.active { color:var(--accent); }
 
   /* ─── TEMP STRIP ─── */
   .temp-strip {
@@ -657,7 +673,7 @@
         <button onclick="lunchDone()" style="background:rgba(93,232,140,.15);border:1px solid rgba(93,232,140,.4);color:var(--success);font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:.06em;padding:1px 6px;cursor:pointer;margin-left:2px;">J'ai terminé ✓</button>
       </div>
       <div id="lunch-queue-badge" style="display:none;font-family:'Space Mono',monospace;font-size:9px;color:var(--accent);border:1px solid rgba(232,197,71,.3);padding:2px 6px;background:rgba(232,197,71,.06);"></div>
-      <div id="lang-switcher" style="display:flex;gap:3px;"><button class="topbar-btn lang-btn" data-lang="fr" onclick="setLang('fr')"></button><button class="topbar-btn lang-btn" data-lang="en" onclick="setLang('en')"></button><button class="topbar-btn lang-btn" data-lang="es" onclick="setLang('es')"></button></div>
+      <div id="lang-switcher" style="display:flex;position:relative;"><button class="topbar-btn lang-btn" id="lang-toggle" onclick="basculerMenuLangue(event)"></button><div class="lang-menu" id="lang-menu"></div></div>
       <button class="topbar-btn" id="btn-admin-home" onclick="goAdmin()">ADMIN</button>
     </div>
     <div class="content">
@@ -1572,6 +1588,8 @@ const LANGS = {
     colHome: 'REPOS',
     colReturn: 'RETOUR',
     colPickup: 'CUEILLETTE',
+    nom: 'Français',
+    langHint: 'Choisir la langue',
     // Topbar
     admin: 'ADMIN',
     appTitle: 'Machine',
@@ -1664,6 +1682,8 @@ const LANGS = {
     colHome: 'HOME',
     colReturn: 'RETURN',
     colPickup: 'PICKUP',
+    nom: 'English',
+    langHint: 'Choose language',
     admin: 'ADMIN',
     appTitle: 'Lunch',
     appTitleSub: 'MACHINE',
@@ -1740,6 +1760,8 @@ const LANGS = {
     colHome: 'REPOSO',
     colReturn: 'DEVOLUCIÓN',
     colPickup: 'RECOGIDA',
+    nom: 'Español',
+    langHint: 'Elegir idioma',
     admin: 'ADMIN',
     appTitle: 'Máquina',
     appTitleSub: 'COMIDA',
@@ -1911,13 +1933,53 @@ function applyLang() {
   if(document.getElementById('screen-grid').classList.contains('active')) renderGrid();
   if(document.getElementById('screen-admin').classList.contains('active')) renderAdmin();
 }
+// Menu deroulant, sur le modele des sous-menus de CoHabitat : le bouton
+// montre la langue courante, le menu offre les autres. Trois boutons cote a
+// cote tenaient dans une barre a trois langues, plus au-dela.
+//
+// L'ordre et le contenu du menu se deduisent de LANGS : ajouter une langue,
+// c'est ajouter sa table de traduction (avec sa cle `nom`) et son drapeau
+// dans DRAPEAUX. Rien a toucher ici.
+function languesDisponibles() { return Object.keys(LANGS); }
+
+function basculerMenuLangue(ev) {
+  if(ev) ev.stopPropagation();
+  const menu = document.getElementById('lang-menu');
+  if(menu) menu.classList.toggle('open');
+}
+function fermerMenuLangue() {
+  const menu = document.getElementById('lang-menu');
+  if(menu) menu.classList.remove('open');
+}
+// Un clic ailleurs referme : sans cela le menu ouvert masquerait le haut de
+// l'ecran jusqu'au prochain clic sur son propre bouton.
+document.addEventListener('click', function(ev) {
+  if(!ev.target.closest('#lang-switcher')) fermerMenuLangue();
+});
+function choisirLangue(l) {
+  fermerMenuLangue();
+  setLang(l);
+}
+
 function renderLangBtns() {
-  document.querySelectorAll('.lang-btn').forEach(btn => {
-    const l = btn.dataset.lang;
-    btn.innerHTML = (DRAPEAUX[l] || '') + '<span>' + (LANGS[l] ? LANGS[l].label : l.toUpperCase()) + '</span>';
-    btn.style.color = l === lang ? 'var(--accent)' : 'var(--text-dim)';
-    btn.style.borderColor = l === lang ? 'var(--accent)' : 'var(--border)';
-  });
+  const btn = document.getElementById('lang-toggle');
+  if(btn) {
+    const code = LANGS[lang] ? LANGS[lang].label : lang.toUpperCase();
+    btn.innerHTML = (DRAPEAUX[lang] || '') + '<span>' + code + '</span>'
+      + '<span class="lang-caret">&#9662;</span>';
+    btn.style.color = 'var(--accent)';
+    btn.style.borderColor = 'var(--accent)';
+    btn.title = t('langHint');
+  }
+  const menu = document.getElementById('lang-menu');
+  if(menu) {
+    menu.innerHTML = languesDisponibles().map(function(l) {
+      const nom = (LANGS[l] && LANGS[l].nom) || l.toUpperCase();
+      return '<button class="lang-item' + (l === lang ? ' active' : '') + '"'
+        + ' onclick="choisirLangue(\'' + l + '\')">'
+        + (DRAPEAUX[l] || '') + '<span>' + nom + '</span></button>';
+    }).join('');
+  }
   // Update centered topbar titles
   var pairs = [['tth-main','tth-sub'],['ttg-main','ttg-sub'],['ttp-main','ttp-sub']];
   pairs.forEach(function(p) {
