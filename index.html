@@ -914,10 +914,6 @@
         </g>
       </g>
 
-      <!-- Output delivery zone (bottom, near retour station) -->
-      <rect id="gr-out-box" x="0" y="0" width="52" height="20" rx="3" fill="#0a180a" stroke="#2a5a2a" stroke-width="0.8"/>
-      <text id="gr-out-lbl" font-family="monospace" font-size="5" fill="#5de88c" text-anchor="middle" dominant-baseline="central">SORTIE</text>
-
     </svg>
   </div>
 
@@ -5591,12 +5587,6 @@ window.gantryWaitingPickup = false;
     // Tray visibility
     var tray=document.getElementById('gr-tray');
     if(tray) tray.setAttribute('opacity',G.carrying?'1':'0');
-
-    // Output indicator — repositionné en bas à gauche de la col cueillette
-    var outY = H * 0.72;
-    setAttr('gr-out-box', {x:PAD+2, y:outY, width:56, height:20});
-    var ol=document.getElementById('gr-out-lbl');
-    if(ol){ ol.setAttribute('x',String(PAD+30)); ol.setAttribute('y',String(outY+10)); }
 
     // ── State machine ──────────────────────────────────────────────────
     G.timer--;
