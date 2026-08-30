@@ -1829,10 +1829,51 @@ const DRAPEAU_QUEBEC = (function () {
     + '</svg>';
 })();
 
+// Les emojis drapeaux ne sont pas rendus partout : Chrome sous Windows —
+// c'est-a-dire le navigateur du kiosque — n'embarque aucune police qui les
+// dessine, et retombe sur les deux lettres de l'indicateur regional. A
+// l'ecran, « 🇺🇸 EN » se lit donc « US EN ». Les trois drapeaux sont
+// dessines, aucun ne depend d'une police.
+const DRAPEAU_USA = (function () {
+  // 13 bandes sur 16 px de haut : 1.23 px chacune, les impaires en rouge.
+  var bandes = '';
+  for (var i = 0; i < 7; i++) {
+    bandes += '<rect x="0" y="' + (i * 2.4615).toFixed(2) + '" width="24"'
+      + ' height="1.2308" fill="#b22234"/>';
+  }
+  // Canton : 7 bandes de haut, 2/5 de large. Les 50 etoiles ne tiennent pas
+  // a cette taille — six points suffisent a signer le canton.
+  var etoiles = '';
+  [3.2, 6.4].forEach(function (x) {
+    [2.2, 4.4, 6.6].forEach(function (y) {
+      etoiles += '<circle cx="' + x + '" cy="' + y + '" r="0.55" fill="#fff"/>';
+    });
+  });
+  return '<svg viewBox="0 0 24 16" width="18" height="12" aria-hidden="true"'
+    + ' style="display:block;border-radius:2px;flex-shrink:0;">'
+    + '<rect width="24" height="16" fill="#fff"/>' + bandes
+    + '<rect width="9.6" height="8.62" fill="#3c3b6e"/>' + etoiles
+    + '</svg>';
+})();
+
+// Sans son embleme central, le drapeau mexicain est celui de l'Italie :
+// memes trois bandes verte, blanche et rouge. La tache sombre au centre
+// n'est pas lisible comme un aigle a 18 px, mais elle suffit a lever la
+// confusion, et c'est tout ce qu'on lui demande.
+const DRAPEAU_MEXIQUE = '<svg viewBox="0 0 24 16" width="18" height="12"'
+  + ' aria-hidden="true" style="display:block;border-radius:2px;flex-shrink:0;">'
+  + '<rect width="8" height="16" fill="#006847"/>'
+  + '<rect x="8" width="8" height="16" fill="#fff"/>'
+  + '<rect x="16" width="8" height="16" fill="#ce1126"/>'
+  + '<ellipse cx="12" cy="7.4" rx="1.7" ry="2" fill="#7a5230"/>'
+  + '<path d="M9.9,9.4 A2.7,2.7 0 0 0 14.1,9.4" fill="none" stroke="#006847"'
+  + ' stroke-width="0.8" stroke-linecap="round"/>'
+  + '</svg>';
+
 const DRAPEAUX = {
   fr: DRAPEAU_QUEBEC,
-  en: '<span style="font-size:14px;line-height:1;">🇺🇸</span>',
-  es: '<span style="font-size:14px;line-height:1;">🇲🇽</span>'
+  en: DRAPEAU_USA,
+  es: DRAPEAU_MEXIQUE
 };
 
 let lang = 'fr';
