@@ -695,7 +695,7 @@
     </div>
 
     <!-- COL 2: ZONE CUEILLETTE -->
-    <div style="flex:0.9;display:flex;flex-direction:column;background:#0a180a;border:1px solid #2a4a2a;border-radius:3px;overflow:hidden;">
+    <div style="flex:0.66;display:flex;flex-direction:column;background:#0a180a;border:1px solid #2a4a2a;border-radius:3px;overflow:hidden;">
 
       <!-- ── RETOUR BOÎTE (top half) ── -->
       <div style="flex:1;display:flex;flex-direction:column;border-bottom:1px solid #1a3a1a;overflow:hidden;">
@@ -2671,7 +2671,7 @@ function renderMachineSlots() {
       var div = document.createElement('div');
       div.dataset.slotId = slot.id; // pour alignement vertical du gantry
       // flex:none — la case prend sa hauteur naturelle, le conteneur scroll si nécessaire
-      div.style.cssText = 'flex:none;border:1px solid ' + (has ? color+'66' : '#1a1a2a') + ';background:' + (has ? color+'14' : 'rgba(0,0,0,0.2)') + ';padding:4px 5px;display:flex;flex-direction:column;gap:2px;cursor:' + (has ? 'pointer' : 'default') + ';border-radius:2px;';
+      div.style.cssText = 'flex:none;border:1px solid ' + (has ? color+'66' : '#1a1a2a') + ';background:' + (has ? color+'14' : 'rgba(0,0,0,0.2)') + ';padding:8px 5px;display:flex;flex-direction:column;gap:2px;cursor:' + (has ? 'pointer' : 'default') + ';border-radius:2px;';
       var top = document.createElement('div');
       top.style.cssText = 'display:flex;justify-content:space-between;align-items:baseline;';
       var num2 = document.createElement('span');
