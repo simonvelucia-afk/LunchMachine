@@ -663,13 +663,13 @@
     <div class="content">
       <!-- Machine image side -->
       <div class="home-machine-side" id="machine-interactive">
-  <!-- Layout: [parking | cueillette | zone1 | zone2] — 4 equal columns -->
+  <!-- Layout: [repos | cueillette | zone1 | zone2] — 4 equal columns -->
   <div style="display:flex;flex-direction:row;width:100%;height:100%;gap:2px;background:#0e0e0e;padding:2px;">
 
-    <!-- COL 1: PARKING ROBOT (fixed 68px) -->
+    <!-- COL 1: REPOS DU ROBOT (fixed 68px) -->
     <div style="flex:0 0 68px;display:flex;flex-direction:column;background:#111;border:1px solid #222;border-radius:3px;overflow:hidden;">
       <div style="background:#1a1a1a;padding:3px 4px;flex-shrink:0;border-bottom:1px solid #222;">
-        <span style="font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#555;">PARKING</span>
+        <span style="font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#555;">REPOS</span>
       </div>
       <div style="flex:1;display:flex;align-items:center;justify-content:center;">
         <svg width="48" height="120" viewBox="0 0 48 120">
@@ -1289,7 +1289,7 @@
             <!-- Positions rapides -->
             <div style="font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text-faint);margin-bottom:5px;">POSITIONS RAPIDES</div>
             <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px;">
-              <button class="btn" onclick="manualGoto(0.02,0)"    style="font-size:10px;padding:4px 8px;">⌂ Parking</button>
+              <button class="btn" onclick="manualGoto(0.02,0)"    style="font-size:10px;padding:4px 8px;">⌂ Repos</button>
               <button class="btn" onclick="manualGoto(0.268,null)" style="font-size:10px;padding:4px 8px;">📦 Pickup</button>
               <button class="btn" onclick="manualGoto(0.551,null)" style="font-size:10px;padding:4px 8px;">Z1</button>
               <button class="btn" onclick="manualGoto(0.849,null)" style="font-size:10px;padding:4px 8px;">Z2</button>
@@ -5113,6 +5113,28 @@ window.gantryWaitingPickup = false;
   // Sinon la fraction calculee ici pointe plus a gauche ou droite que la cible reelle.
   var GANTRY_PAD = 8;
 
+  // Hauteur de la bande d'entetes de colonnes (REPOS / RETOUR / ZONE #1 /
+  // ZONE #2), exprimee dans les unites du SVG. Le rail X du haut demarrait
+  // a y=0, donc par-dessus ces entetes : au repos, le chariot recouvrait le
+  // libelle de la premiere colonne. Le portique commence maintenant sous la
+  // ligne d'entete, et ne cache plus rien.
+  //
+  // Les rects DOM sont mis a l'echelle par le transform de <body> (zoom
+  // kiosque), pas les unites du SVG : d'ou la division par le facteur
+  // d'echelle, releve sur le SVG lui-meme.
+  function getHeaderY() {
+    var svg = document.getElementById('gantry-svg');
+    var lbl = document.getElementById('col-z1-lbl');
+    if(!svg || !lbl || !lbl.parentElement) return 0;
+    var svgRect = svg.getBoundingClientRect();
+    var inner = svg.clientHeight || svgRect.height;
+    if(!svgRect.height || !inner) return 0;
+    var echelle = svgRect.height / inner;
+    var h = lbl.parentElement.getBoundingClientRect();
+    return Math.max(0, (h.bottom - svgRect.top) / echelle);
+  }
+  window._gantryHeaderY = getHeaderY;
+
   // Mesure les vraies positions X des colonnes en fractions compensees par PAD.
   // Retourne G.x tel que PAD + G.x*(W-PAD*2) = centre DOM de la colonne.
   function getColXFracs() {
@@ -5152,7 +5174,7 @@ window.gantryWaitingPickup = false;
     if(!svgRect.height) return null;
     var r = el.getBoundingClientRect();
     var RAIL_H = 5, RUNNER_H = 7;
-    var travelTop = 0 + RUNNER_H; // TOP_Y + RUNNER_H
+    var travelTop = getHeaderY() + RUNNER_H; // TOP_Y + RUNNER_H
     // Centre du slot en pixels, ramene dans l'espace de travel du rail Y
     var yPx = r.top + r.height / 2 - svgRect.top - travelTop;
     // Borne [0, zMax]
@@ -5392,7 +5414,7 @@ window.gantryWaitingPickup = false;
 
     // ── Geometry ────────────────────────────────────────────────────
     var PAD=8, RAIL_H=5, RUNNER_H=7;
-    var TOP_Y=0;
+    var TOP_Y=getHeaderY();
     var BOT_Y=H-RAIL_H;
     var TRAVEL_TOP=TOP_Y+RUNNER_H;
     var TRAVEL_BOT=BOT_Y-RUNNER_H;
