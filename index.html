@@ -669,7 +669,7 @@
     <!-- COL 1: REPOS DU ROBOT (fixed 68px) -->
     <div style="flex:0 0 68px;display:flex;flex-direction:column;background:#111;border:1px solid #222;border-radius:3px;overflow:hidden;">
       <div style="background:#1a1a1a;padding:3px 4px;flex-shrink:0;border-bottom:1px solid #222;">
-        <span style="font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#555;">REPOS</span>
+        <span style="font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#555;" data-i18n="colHome">REPOS</span>
       </div>
       <div style="flex:1;display:flex;align-items:center;justify-content:center;">
         <svg width="48" height="120" viewBox="0 0 48 120">
@@ -700,7 +700,7 @@
       <!-- ── RETOUR BOÎTE (top half) ── -->
       <div style="flex:1;display:flex;flex-direction:column;border-bottom:1px solid #1a3a1a;overflow:hidden;">
         <div style="background:#1a3a1a;padding:3px 4px;flex-shrink:0;">
-          <span style="font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#5de88c;">&#9851; RETOUR</span>
+          <span style="font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#5de88c;">&#9851; <span data-i18n="colReturn">RETOUR</span></span>
         </div>
         <!-- Lavage en cours -->
         <div id="washing-panel" style="display:none;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:4px;flex:1;">
@@ -773,7 +773,7 @@
       <!-- ── CUEILLETTE (bottom half) ── -->
       <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;">
         <div style="background:#1a3a1a;padding:3px 4px;flex-shrink:0;">
-          <span style="font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#5de88c;">&#9660; CUEILLETTE</span>
+          <span style="font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#5de88c;">&#9660; <span data-i18n="colPickup">CUEILLETTE</span></span>
         </div>
         <!-- Vide -->
         <div id="pickup-col-empty" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:4px;">
@@ -913,10 +913,6 @@
           </g>
         </g>
       </g>
-
-      <!-- Output delivery zone (bottom, near retour station) -->
-      <rect id="gr-out-box" x="0" y="0" width="52" height="20" rx="3" fill="#0a180a" stroke="#2a5a2a" stroke-width="0.8"/>
-      <text id="gr-out-lbl" font-family="monospace" font-size="5" fill="#5de88c" text-anchor="middle" dominant-baseline="central">SORTIE</text>
 
     </svg>
   </div>
@@ -1572,6 +1568,10 @@ let state = loadState();
 const LANGS = {
   fr: {
     code:'fr', label:'FR',
+    // Colonnes de la machine
+    colHome: 'REPOS',
+    colReturn: 'RETOUR',
+    colPickup: 'CUEILLETTE',
     // Topbar
     admin: 'ADMIN',
     appTitle: 'Machine',
@@ -1661,6 +1661,9 @@ const LANGS = {
   },
   en: {
     code:'en', label:'EN',
+    colHome: 'HOME',
+    colReturn: 'RETURN',
+    colPickup: 'PICKUP',
     admin: 'ADMIN',
     appTitle: 'Lunch',
     appTitleSub: 'MACHINE',
@@ -1734,6 +1737,9 @@ const LANGS = {
   },
   es: {
     code:'es', label:'ES',
+    colHome: 'REPOSO',
+    colReturn: 'DEVOLUCIÓN',
+    colPickup: 'RECOGIDA',
     admin: 'ADMIN',
     appTitle: 'Máquina',
     appTitleSub: 'COMIDA',
@@ -1829,10 +1835,51 @@ const DRAPEAU_QUEBEC = (function () {
     + '</svg>';
 })();
 
+// Les emojis drapeaux ne sont pas rendus partout : Chrome sous Windows —
+// c'est-a-dire le navigateur du kiosque — n'embarque aucune police qui les
+// dessine, et retombe sur les deux lettres de l'indicateur regional. A
+// l'ecran, « 🇺🇸 EN » se lit donc « US EN ». Les trois drapeaux sont
+// dessines, aucun ne depend d'une police.
+const DRAPEAU_USA = (function () {
+  // 13 bandes sur 16 px de haut : 1.23 px chacune, les impaires en rouge.
+  var bandes = '';
+  for (var i = 0; i < 7; i++) {
+    bandes += '<rect x="0" y="' + (i * 2.4615).toFixed(2) + '" width="24"'
+      + ' height="1.2308" fill="#b22234"/>';
+  }
+  // Canton : 7 bandes de haut, 2/5 de large. Les 50 etoiles ne tiennent pas
+  // a cette taille — six points suffisent a signer le canton.
+  var etoiles = '';
+  [3.2, 6.4].forEach(function (x) {
+    [2.2, 4.4, 6.6].forEach(function (y) {
+      etoiles += '<circle cx="' + x + '" cy="' + y + '" r="0.55" fill="#fff"/>';
+    });
+  });
+  return '<svg viewBox="0 0 24 16" width="18" height="12" aria-hidden="true"'
+    + ' style="display:block;border-radius:2px;flex-shrink:0;">'
+    + '<rect width="24" height="16" fill="#fff"/>' + bandes
+    + '<rect width="9.6" height="8.62" fill="#3c3b6e"/>' + etoiles
+    + '</svg>';
+})();
+
+// Sans son embleme central, le drapeau mexicain est celui de l'Italie :
+// memes trois bandes verte, blanche et rouge. La tache sombre au centre
+// n'est pas lisible comme un aigle a 18 px, mais elle suffit a lever la
+// confusion, et c'est tout ce qu'on lui demande.
+const DRAPEAU_MEXIQUE = '<svg viewBox="0 0 24 16" width="18" height="12"'
+  + ' aria-hidden="true" style="display:block;border-radius:2px;flex-shrink:0;">'
+  + '<rect width="8" height="16" fill="#006847"/>'
+  + '<rect x="8" width="8" height="16" fill="#fff"/>'
+  + '<rect x="16" width="8" height="16" fill="#ce1126"/>'
+  + '<ellipse cx="12" cy="7.4" rx="1.7" ry="2" fill="#7a5230"/>'
+  + '<path d="M9.9,9.4 A2.7,2.7 0 0 0 14.1,9.4" fill="none" stroke="#006847"'
+  + ' stroke-width="0.8" stroke-linecap="round"/>'
+  + '</svg>';
+
 const DRAPEAUX = {
   fr: DRAPEAU_QUEBEC,
-  en: '<span style="font-size:14px;line-height:1;">🇺🇸</span>',
-  es: '<span style="font-size:14px;line-height:1;">🇲🇽</span>'
+  en: DRAPEAU_USA,
+  es: DRAPEAU_MEXIQUE
 };
 
 let lang = 'fr';
@@ -1850,6 +1897,9 @@ function applyLang() {
   renderTempStrips();
   renderMachineZoneOverlays();
   renderHomeStats();
+  // Les casiers des zones portent eux aussi du texte traduit (« vide »),
+  // et n'etaient pas redessines au changement de langue.
+  renderMachineSlots();
   renderLangBtns();
   // Update static HTML elements
   document.querySelectorAll('[data-i18n]').forEach(el => {
@@ -2696,7 +2746,7 @@ function renderMachineSlots() {
       } else {
         var e = document.createElement('div');
         e.style.cssText = 'font-size:12px;color:#2a2a3a;font-style:italic;';
-        e.textContent = '— vide';
+        e.textContent = '— ' + t('slotEmpty');
         div.appendChild(e);
       }
       panelEl.appendChild(div);
@@ -4887,7 +4937,7 @@ renderTempStrips();
 renderMachineZoneOverlays();
 renderHomeStats();
 renderMachineSlots();
-renderLangBtns();
+applyLang();
 updateAdminBtn();
 
 // ─── Auto-login via token passé dans l'URL depuis CoHabitat ──────────────────
@@ -5537,12 +5587,6 @@ window.gantryWaitingPickup = false;
     // Tray visibility
     var tray=document.getElementById('gr-tray');
     if(tray) tray.setAttribute('opacity',G.carrying?'1':'0');
-
-    // Output indicator — repositionné en bas à gauche de la col cueillette
-    var outY = H * 0.72;
-    setAttr('gr-out-box', {x:PAD+2, y:outY, width:56, height:20});
-    var ol=document.getElementById('gr-out-lbl');
-    if(ol){ ol.setAttribute('x',String(PAD+30)); ol.setAttribute('y',String(outY+10)); }
 
     // ── State machine ──────────────────────────────────────────────────
     G.timer--;
