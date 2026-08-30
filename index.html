@@ -2712,8 +2712,23 @@ function renderAll() {
   renderMachineZoneOverlays();
 }
 
-// Load saved language
-try { const sl = localStorage.getItem('mllang'); if(sl && LANGS[sl]) lang = sl; } catch(e) {}
+// Langue : celle passee par CoHabitat a l'ouverture, sinon la derniere
+// retenue ici.
+//
+// Le kiosque est servi depuis un autre domaine que CoHabitat, et son
+// localStorage lui est donc propre : sans le parametre, il rouvrait dans la
+// langue du dernier passant, pas dans celle du resident qui vient de
+// cliquer. Un francophone tombait sur un kiosque en espagnol.
+try {
+  const ql = new URLSearchParams(location.search).get('lang');
+  if(ql && LANGS[ql]) {
+    lang = ql;
+    try { localStorage.setItem('mllang', ql); } catch(e) {}
+  } else {
+    const sl = localStorage.getItem('mllang');
+    if(sl && LANGS[sl]) lang = sl;
+  }
+} catch(e) {}
 
 // ═══════════════════════════════
 //  CLOCK
