@@ -84,6 +84,7 @@
   }
   .topbar-btn:hover { border-color:var(--accent); color:var(--accent); }
   .topbar-btn.danger { border-color:var(--accent3); color:var(--accent3); }
+  .lang-btn { display:flex; align-items:center; gap:5px; }
 
   /* ─── TEMP STRIP ─── */
   .temp-strip {
@@ -656,19 +657,19 @@
         <button onclick="lunchDone()" style="background:rgba(93,232,140,.15);border:1px solid rgba(93,232,140,.4);color:var(--success);font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:.06em;padding:1px 6px;cursor:pointer;margin-left:2px;">J'ai terminé ✓</button>
       </div>
       <div id="lunch-queue-badge" style="display:none;font-family:'Space Mono',monospace;font-size:9px;color:var(--accent);border:1px solid rgba(232,197,71,.3);padding:2px 6px;background:rgba(232,197,71,.06);"></div>
-      <div id="lang-switcher" style="display:flex;gap:3px;"><button class="topbar-btn lang-btn" data-lang="fr" onclick="setLang('fr')">🇫🇷 FR</button><button class="topbar-btn lang-btn" data-lang="en" onclick="setLang('en')">🇬🇧 EN</button><button class="topbar-btn lang-btn" data-lang="es" onclick="setLang('es')">🇪🇸 ES</button></div>
+      <div id="lang-switcher" style="display:flex;gap:3px;"><button class="topbar-btn lang-btn" data-lang="fr" onclick="setLang('fr')"></button><button class="topbar-btn lang-btn" data-lang="en" onclick="setLang('en')"></button><button class="topbar-btn lang-btn" data-lang="es" onclick="setLang('es')"></button></div>
       <button class="topbar-btn" id="btn-admin-home" onclick="goAdmin()">ADMIN</button>
     </div>
     <div class="content">
       <!-- Machine image side -->
       <div class="home-machine-side" id="machine-interactive">
-  <!-- Layout: [parking | cueillette | zone1 | zone2] — 4 equal columns -->
+  <!-- Layout: [repos | cueillette | zone1 | zone2] — 4 equal columns -->
   <div style="display:flex;flex-direction:row;width:100%;height:100%;gap:2px;background:#0e0e0e;padding:2px;">
 
-    <!-- COL 1: PARKING ROBOT (fixed 68px) -->
+    <!-- COL 1: REPOS DU ROBOT (fixed 68px) -->
     <div style="flex:0 0 68px;display:flex;flex-direction:column;background:#111;border:1px solid #222;border-radius:3px;overflow:hidden;">
       <div style="background:#1a1a1a;padding:3px 4px;flex-shrink:0;border-bottom:1px solid #222;">
-        <span style="font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#555;">PARKING</span>
+        <span style="font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#555;">REPOS</span>
       </div>
       <div style="flex:1;display:flex;align-items:center;justify-content:center;">
         <svg width="48" height="120" viewBox="0 0 48 120">
@@ -694,7 +695,7 @@
     </div>
 
     <!-- COL 2: ZONE CUEILLETTE -->
-    <div style="flex:0.9;display:flex;flex-direction:column;background:#0a180a;border:1px solid #2a4a2a;border-radius:3px;overflow:hidden;">
+    <div style="flex:0.66;display:flex;flex-direction:column;background:#0a180a;border:1px solid #2a4a2a;border-radius:3px;overflow:hidden;">
 
       <!-- ── RETOUR BOÎTE (top half) ── -->
       <div style="flex:1;display:flex;flex-direction:column;border-bottom:1px solid #1a3a1a;overflow:hidden;">
@@ -1288,7 +1289,7 @@
             <!-- Positions rapides -->
             <div style="font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text-faint);margin-bottom:5px;">POSITIONS RAPIDES</div>
             <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px;">
-              <button class="btn" onclick="manualGoto(0.02,0)"    style="font-size:10px;padding:4px 8px;">⌂ Parking</button>
+              <button class="btn" onclick="manualGoto(0.02,0)"    style="font-size:10px;padding:4px 8px;">⌂ Repos</button>
               <button class="btn" onclick="manualGoto(0.268,null)" style="font-size:10px;padding:4px 8px;">📦 Pickup</button>
               <button class="btn" onclick="manualGoto(0.551,null)" style="font-size:10px;padding:4px 8px;">Z1</button>
               <button class="btn" onclick="manualGoto(0.849,null)" style="font-size:10px;padding:4px 8px;">Z2</button>
@@ -1570,7 +1571,7 @@ let state = loadState();
 // ═══════════════════════════════
 const LANGS = {
   fr: {
-    code:'fr', flag:'🇫🇷', label:'FR',
+    code:'fr', label:'FR',
     // Topbar
     admin: 'ADMIN',
     appTitle: 'Machine',
@@ -1659,7 +1660,7 @@ const LANGS = {
     casesCount: (a,b) => `${a}/${b}`,
   },
   en: {
-    code: "en', flag: '🇬🇧', label: 'EN",
+    code:'en', label:'EN',
     admin: 'ADMIN',
     appTitle: 'Lunch',
     appTitleSub: 'MACHINE',
@@ -1732,7 +1733,7 @@ const LANGS = {
     casesCount: (a,b) => `${a}/${b}`,
   },
   es: {
-    code: "es', flag: '🇪🇸', label: 'ES",
+    code:'es', label:'ES',
     admin: 'ADMIN',
     appTitle: 'Máquina',
     appTitleSub: 'COMIDA',
@@ -1805,6 +1806,35 @@ const LANGS = {
   },
 };
 
+// Drapeaux du selecteur de langue — identiques a ceux de la page
+// principale CoHabitat.
+//
+// Le Quebec n'a pas d'emoji : Unicode ne code que les pays (ISO 3166-1),
+// les seules subdivisions codees etant l'Ecosse, le pays de Galles et
+// l'Angleterre. Le fleurdelise est donc dessine — croix blanche sur fond
+// bleu, quatre fleurs de lis simplifiees, lisibles a 18 px.
+const DRAPEAU_QUEBEC = (function () {
+  const lis = (x, y) => `<g transform="translate(${x},${y})" fill="#fff">`
+    + '<path d="M0,-2.3 C1,-1.2 1,-0.2 0,0.6 C-1,-0.2 -1,-1.2 0,-2.3 Z"/>'
+    + '<path d="M-2.1,-0.5 C-1.3,-1.3 -0.6,-0.9 -0.4,0.2 C-1.2,0.6 -1.9,0.3 -2.1,-0.5 Z"/>'
+    + '<path d="M2.1,-0.5 C1.3,-1.3 0.6,-0.9 0.4,0.2 C1.2,0.6 1.9,0.3 2.1,-0.5 Z"/>'
+    + '<rect x="-1.6" y="0.6" width="3.2" height="0.7"/>'
+    + '<rect x="-0.5" y="1.3" width="1" height="1.4"/></g>';
+  return '<svg viewBox="0 0 24 16" width="18" height="12" aria-hidden="true"'
+    + ' style="display:block;border-radius:2px;flex-shrink:0;">'
+    + '<rect width="24" height="16" fill="#095797"/>'
+    + lis(5.6, 3.6) + lis(18.4, 3.6) + lis(5.6, 12.4) + lis(18.4, 12.4)
+    + '<rect x="10.4" y="0" width="3.2" height="16" fill="#fff"/>'
+    + '<rect x="0" y="6.4" width="24" height="3.2" fill="#fff"/>'
+    + '</svg>';
+})();
+
+const DRAPEAUX = {
+  fr: DRAPEAU_QUEBEC,
+  en: '<span style="font-size:14px;line-height:1;">🇺🇸</span>',
+  es: '<span style="font-size:14px;line-height:1;">🇲🇽</span>'
+};
+
 let lang = 'fr';
 function t(key, ...args) {
   const v = LANGS[lang][key];
@@ -1833,8 +1863,10 @@ function applyLang() {
 }
 function renderLangBtns() {
   document.querySelectorAll('.lang-btn').forEach(btn => {
-    btn.style.color = btn.dataset.lang === lang ? 'var(--accent)' : 'var(--text-dim)';
-    btn.style.borderColor = btn.dataset.lang === lang ? 'var(--accent)' : 'var(--border)';
+    const l = btn.dataset.lang;
+    btn.innerHTML = (DRAPEAUX[l] || '') + '<span>' + (LANGS[l] ? LANGS[l].label : l.toUpperCase()) + '</span>';
+    btn.style.color = l === lang ? 'var(--accent)' : 'var(--text-dim)';
+    btn.style.borderColor = l === lang ? 'var(--accent)' : 'var(--border)';
   });
   // Update centered topbar titles
   var pairs = [['tth-main','tth-sub'],['ttg-main','ttg-sub'],['ttp-main','ttp-sub']];
@@ -2639,7 +2671,7 @@ function renderMachineSlots() {
       var div = document.createElement('div');
       div.dataset.slotId = slot.id; // pour alignement vertical du gantry
       // flex:none — la case prend sa hauteur naturelle, le conteneur scroll si nécessaire
-      div.style.cssText = 'flex:none;border:1px solid ' + (has ? color+'66' : '#1a1a2a') + ';background:' + (has ? color+'14' : 'rgba(0,0,0,0.2)') + ';padding:4px 5px;display:flex;flex-direction:column;gap:2px;cursor:' + (has ? 'pointer' : 'default') + ';border-radius:2px;';
+      div.style.cssText = 'flex:none;border:1px solid ' + (has ? color+'66' : '#1a1a2a') + ';background:' + (has ? color+'14' : 'rgba(0,0,0,0.2)') + ';padding:8px 5px;display:flex;flex-direction:column;gap:2px;cursor:' + (has ? 'pointer' : 'default') + ';border-radius:2px;';
       var top = document.createElement('div');
       top.style.cssText = 'display:flex;justify-content:space-between;align-items:baseline;';
       var num2 = document.createElement('span');
@@ -2655,7 +2687,7 @@ function renderMachineSlots() {
       div.appendChild(top);
       if(has) {
         var desc = document.createElement('div');
-        desc.style.cssText = 'font-size:10px;color:#ccc;line-height:1.3;';
+        desc.style.cssText = 'font-size:12px;color:#ccc;line-height:1.3;';
         desc.textContent = slot.desc;
         div.appendChild(desc);
         (function(slotId){ div.addEventListener('click', function(){
@@ -2663,7 +2695,7 @@ function renderMachineSlots() {
         }); })(slot.id);
       } else {
         var e = document.createElement('div');
-        e.style.cssText = 'font-size:10px;color:#2a2a3a;font-style:italic;';
+        e.style.cssText = 'font-size:12px;color:#2a2a3a;font-style:italic;';
         e.textContent = '— vide';
         div.appendChild(e);
       }
@@ -5081,6 +5113,28 @@ window.gantryWaitingPickup = false;
   // Sinon la fraction calculee ici pointe plus a gauche ou droite que la cible reelle.
   var GANTRY_PAD = 8;
 
+  // Hauteur de la bande d'entetes de colonnes (REPOS / RETOUR / ZONE #1 /
+  // ZONE #2), exprimee dans les unites du SVG. Le rail X du haut demarrait
+  // a y=0, donc par-dessus ces entetes : au repos, le chariot recouvrait le
+  // libelle de la premiere colonne. Le portique commence maintenant sous la
+  // ligne d'entete, et ne cache plus rien.
+  //
+  // Les rects DOM sont mis a l'echelle par le transform de <body> (zoom
+  // kiosque), pas les unites du SVG : d'ou la division par le facteur
+  // d'echelle, releve sur le SVG lui-meme.
+  function getHeaderY() {
+    var svg = document.getElementById('gantry-svg');
+    var lbl = document.getElementById('col-z1-lbl');
+    if(!svg || !lbl || !lbl.parentElement) return 0;
+    var svgRect = svg.getBoundingClientRect();
+    var inner = svg.clientHeight || svgRect.height;
+    if(!svgRect.height || !inner) return 0;
+    var echelle = svgRect.height / inner;
+    var h = lbl.parentElement.getBoundingClientRect();
+    return Math.max(0, (h.bottom - svgRect.top) / echelle);
+  }
+  window._gantryHeaderY = getHeaderY;
+
   // Mesure les vraies positions X des colonnes en fractions compensees par PAD.
   // Retourne G.x tel que PAD + G.x*(W-PAD*2) = centre DOM de la colonne.
   function getColXFracs() {
@@ -5105,9 +5159,19 @@ window.gantryWaitingPickup = false;
     };
   }
 
-  // Mesure la position Z (verticale, en pixels dans l'espace de travel) du centre
-  // d'un slot precis, pour que le robot pointe sur la bonne rangee et pas au
-  // milieu de la colonne. Retourne null si le DOM n'est pas pret.
+  // Mesure la position Z (verticale, en unites SVG dans l'espace de travel) du
+  // centre d'un slot precis, pour que le robot pointe sur la bonne rangee et
+  // pas au milieu de la colonne. Retourne null si le DOM n'est pas pret.
+  //
+  // Deux pieges, tous deux corrigeant un robot qui visait trop bas :
+  //
+  //  - getBoundingClientRect() rend des pixels ecran, donc multiplies par le
+  //    zoom kiosque de <body> ; le rail Y, lui, travaille en unites SVG. Sans
+  //    la division par l'echelle, la cible etait gonflee du meme facteur et
+  //    l'erreur croissait avec la profondeur de la rangee — le dernier casier
+  //    envoyait le robot au plancher.
+  //  - la formule doit etre l'inverse exacte de celle d'updateGantry(),
+  //    cy = travelTop + z + RUNNER_H, sinon le RUNNER_H compte double.
   function getSlotZ(zoneKey, slotId) {
     var svg = document.getElementById('gantry-svg');
     if(!svg) return null;
@@ -5117,14 +5181,18 @@ window.gantryWaitingPickup = false;
     var el = container.querySelector('[data-slot-id="' + slotId + '"]');
     if(!el) return null;
     var svgRect = svg.getBoundingClientRect();
-    if(!svgRect.height) return null;
+    var inner = svg.clientHeight || svgRect.height;
+    if(!svgRect.height || !inner) return null;
+    var echelle = svgRect.height / inner;
     var r = el.getBoundingClientRect();
     var RAIL_H = 5, RUNNER_H = 7;
-    var travelTop = 0 + RUNNER_H; // TOP_Y + RUNNER_H
-    // Centre du slot en pixels, ramene dans l'espace de travel du rail Y
-    var yPx = r.top + r.height / 2 - svgRect.top - travelTop;
-    // Borne [0, zMax]
-    var zMax = svgRect.height - RAIL_H - RUNNER_H - travelTop - 28;
+    var travelTop = getHeaderY() + RUNNER_H; // TOP_Y + RUNNER_H
+    // Centre du slot, ramene des pixels ecran aux unites SVG, puis dans
+    // l'espace de travel du rail Y.
+    var centre = (r.top + r.height / 2 - svgRect.top) / echelle;
+    var yPx = centre - travelTop - RUNNER_H;
+    // Borne [0, zMax] — meme zMax que celui d'updateGantry().
+    var zMax = (inner - RAIL_H - RUNNER_H) - travelTop - 28;
     return Math.max(0, Math.min(zMax, yPx));
   }
   window._getSlotZ = getSlotZ;
@@ -5360,7 +5428,7 @@ window.gantryWaitingPickup = false;
 
     // ── Geometry ────────────────────────────────────────────────────
     var PAD=8, RAIL_H=5, RUNNER_H=7;
-    var TOP_Y=0;
+    var TOP_Y=getHeaderY();
     var BOT_Y=H-RAIL_H;
     var TRAVEL_TOP=TOP_Y+RUNNER_H;
     var TRAVEL_BOT=BOT_Y-RUNNER_H;
