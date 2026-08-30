@@ -5159,9 +5159,19 @@ window.gantryWaitingPickup = false;
     };
   }
 
-  // Mesure la position Z (verticale, en pixels dans l'espace de travel) du centre
-  // d'un slot precis, pour que le robot pointe sur la bonne rangee et pas au
-  // milieu de la colonne. Retourne null si le DOM n'est pas pret.
+  // Mesure la position Z (verticale, en unites SVG dans l'espace de travel) du
+  // centre d'un slot precis, pour que le robot pointe sur la bonne rangee et
+  // pas au milieu de la colonne. Retourne null si le DOM n'est pas pret.
+  //
+  // Deux pieges, tous deux corrigeant un robot qui visait trop bas :
+  //
+  //  - getBoundingClientRect() rend des pixels ecran, donc multiplies par le
+  //    zoom kiosque de <body> ; le rail Y, lui, travaille en unites SVG. Sans
+  //    la division par l'echelle, la cible etait gonflee du meme facteur et
+  //    l'erreur croissait avec la profondeur de la rangee — le dernier casier
+  //    envoyait le robot au plancher.
+  //  - la formule doit etre l'inverse exacte de celle d'updateGantry(),
+  //    cy = travelTop + z + RUNNER_H, sinon le RUNNER_H compte double.
   function getSlotZ(zoneKey, slotId) {
     var svg = document.getElementById('gantry-svg');
     if(!svg) return null;
@@ -5171,14 +5181,18 @@ window.gantryWaitingPickup = false;
     var el = container.querySelector('[data-slot-id="' + slotId + '"]');
     if(!el) return null;
     var svgRect = svg.getBoundingClientRect();
-    if(!svgRect.height) return null;
+    var inner = svg.clientHeight || svgRect.height;
+    if(!svgRect.height || !inner) return null;
+    var echelle = svgRect.height / inner;
     var r = el.getBoundingClientRect();
     var RAIL_H = 5, RUNNER_H = 7;
     var travelTop = getHeaderY() + RUNNER_H; // TOP_Y + RUNNER_H
-    // Centre du slot en pixels, ramene dans l'espace de travel du rail Y
-    var yPx = r.top + r.height / 2 - svgRect.top - travelTop;
-    // Borne [0, zMax]
-    var zMax = svgRect.height - RAIL_H - RUNNER_H - travelTop - 28;
+    // Centre du slot, ramene des pixels ecran aux unites SVG, puis dans
+    // l'espace de travel du rail Y.
+    var centre = (r.top + r.height / 2 - svgRect.top) / echelle;
+    var yPx = centre - travelTop - RUNNER_H;
+    // Borne [0, zMax] — meme zMax que celui d'updateGantry().
+    var zMax = (inner - RAIL_H - RUNNER_H) - travelTop - 28;
     return Math.max(0, Math.min(zMax, yPx));
   }
   window._getSlotZ = getSlotZ;
