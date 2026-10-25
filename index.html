@@ -2550,32 +2550,75 @@ setInterval(tickTemperatures, 4000);
 // ═══════════════════════════════
 //  SUPABASE CONFIG
 // ═══════════════════════════════
-const SB_URL  = 'https://bpxscgrbxjscicpnheep.supabase.co';
-const SB_ANON = 'sb_publishable_2V-eHOvw1v_Xwr1bpHfHLg_cbHW9ctD';
+// La machine vit dans la base de l'immeuble (CoHabitat, migration 037) :
+// machine, zones, cases, menus, et le solde des residents. La centrale
+// Modulimo n'est plus requise pour vendre.
+//
+// Base de l'immeuble. Un kiosque sert un immeuble, comme CoHabitat lui-meme
+// (un depot et une configuration par immeuble).
+const COHAB_URL  = 'https://uwyhrdjlwetcbtskijrs.supabase.co';
+const COHAB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV3eWhyZGpsd2V0Y2J0c2tpanJzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1NzMxNjYsImV4cCI6MjA4ODE0OTE2Nn0.NHo_RY4DjTmtkFcjOJ3dFPzNRN1rCwBCDXyIixOSrn4';
+const SB_URL  = COHAB_URL;
+const SB_ANON = COHAB_ANON;
 
-// Edge Function finance-bridge : passerelle vers la centrale Modulimo.
-// Toutes les operations sur le solde (lecture, debit) passent par cette
-// passerelle ; il n'y a plus de chemin local.
-const FINANCE_BRIDGE_URL = SB_URL + '/functions/v1/finance-bridge';
+// L'ancien module balanceOps debitait la centrale et rejouait sa file
+// d'attente au demarrage. Il n'est plus construit : le debit se fait en
+// base, en une transaction (lunch_acheter), et une file d'attente locale
+// ne doit plus partir vers la centrale.
+const _balanceOps = null;
 
-// ─── balanceOps : primitive unifiee + outbox localStorage ────────────
-// Toutes les mutations de solde (lunch purchase) passent par ce module
-// pour beneficier du retry automatique en cas de coupure reseau. L'idem-
-// potency_key cote serveur garantit qu'aucun retry n'introduit de
-// double debit. Voir balanceOps.js pour le contrat de retour.
-const _balanceOps = (typeof createBalanceOps === 'function') ? createBalanceOps({
-  bridgeUrl: FINANCE_BRIDGE_URL,
-  anonKey:   SB_ANON,
-  // Le JWT est porte par lunchSession (chsession handoff ou login direct).
-  // Si pas de session, le module retourne NO_SESSION sans queue (la borne
-  // ne peut rien debiter sans auth).
-  getAuthToken: function () {
-    return (typeof lunchSession !== 'undefined' && lunchSession && lunchSession.token) ? lunchSession.token : null;
-  },
-  storageKey: 'modulimo:lunch:balanceOps:outbox:v1',
-  onChange: function (count, hasStuck) { renderOutboxBanner(count, hasStuck); },
-}) : null;
-if (!_balanceOps) console.error('[balanceOps] module non charge — verifier <script src="balanceOps.js">');
+// Le PIN saisi a l'ecran d'administration, garde en memoire le temps de
+// la visite : la base le reverifie a chaque ecriture. Jamais stocke.
+let _adminPin = null;
+
+function _jetonSession() {
+  return (typeof lunchSession !== 'undefined' && lunchSession && lunchSession.token) ? lunchSession.token : null;
+}
+
+// Appel d'une fonction de la base de l'immeuble. Avec le jeton de session
+// s'il y en a un (achat, solde), sinon avec la cle anon (lecture, PIN).
+// Retour : { ok, data } ou { ok:false, error, status }.
+async function lunchRpc(fn, args, token) {
+  const jeton = token || _jetonSession();
+  try {
+    const res = await fetch(COHAB_URL + '/rest/v1/rpc/' + fn, {
+      method: 'POST',
+      headers: {
+        'apikey': COHAB_ANON,
+        'Authorization': 'Bearer ' + (jeton || COHAB_ANON),
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(args || {})
+    });
+    const txt = await res.text();
+    let data = null;
+    try { data = txt ? JSON.parse(txt) : null; } catch(_) { data = txt; }
+    if(!res.ok) {
+      const msg = (data && (data.message || data.error)) || ('HTTP_' + res.status);
+      return { ok: false, error: String(msg), status: res.status };
+    }
+    return { ok: true, data: data };
+  } catch(err) {
+    return { ok: false, error: (err && err.message) || 'RESEAU', status: 0 };
+  }
+}
+
+// Ecriture d'administration (case, zone, machine, menu). La base accepte
+// un administrateur ou la personne embauchee a la Machine Lunch (par leur
+// session), ou le PIN de la machine.
+async function lunchEcrire(cible, donnees) {
+  if(!NET_MODE || !MACHINE_ID) return null;
+  const r = await lunchRpc('lunch_kiosque_ecrire', {
+    p_machine_id: MACHINE_ID, p_pin: _adminPin, p_cible: cible, p_donnees: donnees
+  });
+  if(!r.ok || (r.data && r.data.erreur)) {
+    const err = r.ok ? r.data.erreur : r.error;
+    console.error('[lunchEcrire] ' + cible + ' refuse :', err);
+    if(typeof showSuccess === 'function') showSuccess('⚠ Non enregistré', err === 'FORBIDDEN' ? 'Saisissez le PIN de la machine' : err);
+    return null;
+  }
+  return r.data;
+}
 
 // ─── Health probe centrale ───────────────────────────────────────────────
 // Etat global de la centrale, mis a jour par probeCentralHealth(). Sert a
@@ -2596,17 +2639,14 @@ async function probeCentralHealth() {
   const t = setTimeout(function(){ ctrl.abort(); }, 4000);
   const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
   try {
-    const res = await fetch(FINANCE_BRIDGE_URL + '/health', {
+    // La sonde vise la base de l'immeuble : c'est elle qui vend.
+    const res = await fetch(COHAB_URL + '/rest/v1/lunch_machines?select=id&id=eq.' + encodeURIComponent(MACHINE_ID), {
       method: 'GET',
-      headers: { 'apikey': SB_ANON },
+      headers: { 'apikey': SB_ANON, 'Authorization': 'Bearer ' + SB_ANON },
       signal: ctrl.signal
     });
     const ok = res.ok;
-    if(ok) {
-      try { const j = await res.json(); _centralLatencyMs = (j && typeof j.latency_ms === 'number') ? j.latency_ms : null; } catch(_) {}
-    } else {
-      _centralLatencyMs = null;
-    }
+    _centralLatencyMs = ok ? Math.round(((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - t0) : null;
     if(_centralOnline !== ok) {
       console.info('[health] central ' + (ok ? 'UP' : 'DOWN ' + res.status) + ' (latency=' + _centralLatencyMs + 'ms)');
       _centralOnline = ok;
@@ -2652,9 +2692,9 @@ function startCentralHealthProbe() {
 // pour ne pas multiplier les indicateurs dans la topbar.
 function renderCentralBadge() {
   if(!NET_MODE) return;
-  if(_centralOnline === true)       showNetBadge('🟢 CENTRAL ' + (_centralLatencyMs!=null?_centralLatencyMs+'ms':'OK'), '#5de88c');
-  else if(_centralOnline === false) showNetBadge('🔴 CENTRAL HORS-LIGNE', '#e85047');
-  else                              showNetBadge('⏳ CENTRAL…', '#4fa3e8');
+  if(_centralOnline === true)       showNetBadge('🟢 IMMEUBLE ' + (_centralLatencyMs!=null?_centralLatencyMs+'ms':'OK'), '#5de88c');
+  else if(_centralOnline === false) showNetBadge('🔴 HORS-LIGNE', '#e85047');
+  else                              showNetBadge('⏳ CONNEXION…', '#4fa3e8');
 }
 
 // Banniere "X operations en attente" rendue par balanceOps.onChange.
@@ -2698,7 +2738,7 @@ function updateOfflineLocks() {
     buyBtn.disabled = off;
     buyBtn.style.opacity = off ? '0.4' : '';
     buyBtn.style.cursor  = off ? 'not-allowed' : '';
-    buyBtn.title = off ? 'Centrale hors-ligne — achats indisponibles' : '';
+    buyBtn.title = off ? 'Serveur de l\'immeuble injoignable — achats indisponibles' : '';
   }
   let banner = document.getElementById('central-offline-banner');
   if(off) {
@@ -2706,7 +2746,7 @@ function updateOfflineLocks() {
       banner = document.createElement('div');
       banner.id = 'central-offline-banner';
       banner.style.cssText = 'background:#3a1818;border:1px solid #e85047;color:#ffb3a8;font-family:monospace;font-size:11px;padding:6px 10px;text-align:center;letter-spacing:.04em;';
-      banner.textContent = '🔴 CENTRALE HORS-LIGNE — Achats indisponibles. Les fonctions de controle de la machine restent actives.';
+      banner.textContent = '🔴 SERVEUR DE L\'IMMEUBLE INJOIGNABLE — Achats indisponibles. Les fonctions de controle de la machine restent actives.';
       const home = document.getElementById('screen-home');
       if(home && home.firstChild) home.insertBefore(banner, home.firstChild);
     }
@@ -2735,7 +2775,7 @@ async function sbFetch(path, opts) {
     ...opts,
     headers: {
       'apikey': SB_ANON,
-      'Authorization': 'Bearer ' + SB_ANON,
+      'Authorization': 'Bearer ' + (_jetonSession() || SB_ANON),
       'Content-Type': 'application/json',
       'Prefer': 'return=representation',
       ...(opts && opts.headers)
@@ -2750,7 +2790,9 @@ async function sbFetch(path, opts) {
 async function loadFromSupabase() {
   try {
     // Machine
-    const machines = await sbFetch('lunch_machines?id=eq.' + MACHINE_ID + '&select=*');
+    // Liste explicite : le PIN n'est pas lisible (037), un select=* serait refuse.
+    const machines = await sbFetch('lunch_machines?id=eq.' + encodeURIComponent(MACHINE_ID)
+      + '&select=id,name,active,box_max,box_count,gantry_auto_speed,color_ranges');
     if(!machines || !machines.length) throw new Error('Machine introuvable: ' + MACHINE_ID);
     const machine = machines[0];
 
@@ -2797,7 +2839,8 @@ async function loadFromSupabase() {
     state = {
       zones:       Object.keys(zoneMap).length ? zoneMap : def.zones,
       slots:       slotArr.length ? slotArr : def.slots,
-      pin:         machine.pin || '1234',
+      // Le PIN se verifie en base (lunch_pin_valide) ; il n'est plus charge.
+      pin:         null,
       // Reglages persistes sur lunch_machines (migration 005) avec fallback
       // sur les defauts locaux si les colonnes n'existent pas encore.
       colorRanges: machine.color_ranges || def.colorRanges,
@@ -2830,7 +2873,6 @@ async function saveSlotToSupabase(slot) {
   if(!NET_MODE) return;
   try {
     const body = {
-      machine_id:  MACHINE_ID,
       zone_key:    slot.zone,
       slot_num:    slot.id,
       description: slot.desc,
@@ -2848,14 +2890,8 @@ async function saveSlotToSupabase(slot) {
       reserved:    slot.reserved,
       reserved_by: slot.reservedBy
     };
-    if(slot._db_id) {
-      // Update
-      await sbFetch('lunch_slots?id=eq.' + slot._db_id, { method:'PATCH', body: JSON.stringify(body) });
-    } else {
-      // Insert
-      const rows = await sbFetch('lunch_slots', { method:'POST', body: JSON.stringify(body) });
-      if(rows && rows[0]) slot._db_id = rows[0].id;
-    }
+    const r = await lunchEcrire('case', body);
+    if(r && r.id) slot._db_id = r.id;
   } catch(err) { console.error('saveSlot error:', err); }
 }
 
@@ -2864,13 +2900,10 @@ async function saveZoneToSupabase(zoneKey) {
   const z = state.zones[zoneKey];
   if(!z) return;
   try {
-    await sbFetch('lunch_zones?machine_id=eq.' + MACHINE_ID + '&zone_key=eq.' + zoneKey, {
-      method: 'PATCH',
-      body: JSON.stringify({
-        name: z.name, setpoint: z.setpoint,
-        setpoint_min: z.setpointMin, setpoint_max: z.setpointMax,
-        actual: z.actual, slot_count: z.count
-      })
+    await lunchEcrire('zone', {
+      zone_key: zoneKey, name: z.name, setpoint: z.setpoint,
+      setpoint_min: z.setpointMin, setpoint_max: z.setpointMax,
+      actual: z.actual, slot_count: z.count
     });
   } catch(err) { console.error('saveZone error:', err); }
 }
@@ -2897,32 +2930,17 @@ async function fetchUserBalance(userId, depId) {
     return null;
   }
   if(!lunchSession || !lunchSession.token) {
-    console.warn('[fetchUserBalance] pas de JWT de session — central inaccessible');
+    console.warn('[fetchUserBalance] pas de JWT de session');
     return null;
   }
-
-  try {
-    var res = await fetch(FINANCE_BRIDGE_URL + '/get-balance', {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + lunchSession.token,
-        'apikey': SB_ANON,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ dependent_id: depId || null })
-    });
-    if(!res.ok) {
-      var txt = await res.text();
-      console.warn('[fetchUserBalance] finance-bridge ' + res.status + ':', txt.substring(0,200));
-      return null;
-    }
-    var data = await res.json();
-    var n = parseFloat(data && data.virtual_balance);
-    return isNaN(n) ? null : n;
-  } catch(err) {
-    console.warn('[fetchUserBalance] erreur reseau (central):', err.message || err);
+  // Le solde vit dans la base de l'immeuble (lunch_mon_solde, 037).
+  var r = await lunchRpc('lunch_mon_solde', { p_dep_id: depId || null });
+  if(!r.ok) {
+    console.warn('[fetchUserBalance] ' + r.status + ':', r.error);
     return null;
   }
+  var n = parseFloat(r.data);
+  return isNaN(n) ? null : n;
 }
 
 // Met a jour les affichages de solde :
@@ -2984,11 +3002,7 @@ async function refreshHeaderBalance() {
 async function saveMachineSettingsToSupabase(patch) {
   if(!NET_MODE || !MACHINE_ID) return;
   try {
-    await sbFetch('lunch_machines?id=eq.' + encodeURIComponent(MACHINE_ID), {
-      method: 'PATCH',
-      body: JSON.stringify(patch)
-    });
-    console.log('[saveMachineSettings] OK', patch);
+    if(await lunchEcrire('machine', patch)) console.log('[saveMachineSettings] OK', patch);
   } catch(err) {
     // Diagnostic visible : si la migration 005 n'est pas deployee (colonnes
     // absentes) ou si la policy UPDATE bloque, l'utilisateur doit le savoir
@@ -3767,15 +3781,8 @@ function showDoneOverlay() {
   document.body.appendChild(el);
 }
 // ═══════════════════════════════
-// Deux bases Supabase :
-//   - SB_URL (central)   : lunch_machines, lunch_zones, lunch_slots, lunch_menus,
-//                           ledger financier (balances, transactions). Toute
-//                           operation sur le solde passe par finance-bridge.
-//   - COHAB_URL (immeuble): profiles, dependents, lunch_queue, lunch_sessions,
-//                           lunch_transactions (trace locale uniquement).
-const COHAB_URL  = 'https://uwyhrdjlwetcbtskijrs.supabase.co';
-const COHAB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV3eWhyZGpsd2V0Y2J0c2tpanJzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1NzMxNjYsImV4cCI6MjA4ODE0OTE2Nn0.NHo_RY4DjTmtkFcjOJ3dFPzNRN1rCwBCDXyIixOSrn4';
-
+// Une seule base, celle de l'immeuble (COHAB_URL) : machine, cases, menus,
+// comptes, file d'attente, achats et solde.
 const CH_URL  = COHAB_URL;
 const CH_ANON = COHAB_ANON;
 
@@ -4056,13 +4063,13 @@ function startPurchase(id) {
   // locales (remplissage, vidage, calibration), mais pas pour vendre.
   // En DEMO_MODE on contourne ces gardes : tout reste local et fictif.
   if(!NET_MODE && !DEMO_MODE) {
-    showSuccess('Hors-ligne — achats indisponibles', 'Solde gere par la centrale');
+    showSuccess('Hors-ligne — achats indisponibles', 'Aucune machine configurée');
     return;
   }
-  // Health probe : si la centrale ne repond pas, on refuse net plutot que
+  // Health probe : si l'immeuble ne repond pas, on refuse net plutot que
   // de laisser l'usager tomber sur une erreur 4 etapes plus tard.
   if(!DEMO_MODE && _centralOnline === false) {
-    showSuccess('Centrale hors-ligne', 'Achats indisponibles — reessayez sous peu');
+    showSuccess('Serveur de l\'immeuble injoignable', 'Achats indisponibles — reessayez sous peu');
     probeCentralHealth(); // re-probe immediat au cas ou la connexion est revenue
     return;
   }
@@ -4173,70 +4180,42 @@ async function confirmReservation() {
       _lastBalance = _demoBalance;
     }
     if(typeof refreshHeaderBalance === 'function') refreshHeaderBalance();
-  } else if(price > 0) {
-    if(!NET_MODE) {
-      showSuccess('Hors-ligne — achats indisponibles', 'Solde gere par la centrale');
-      return;
-    }
+  } else if(NET_MODE) {
+    // Achat en base, en une transaction (lunch_acheter, migration 037) :
+    // la case est verrouillee, le prix lu en base, le solde verifie et
+    // debite, la case videe. Aussi pour un article sans prix : c'est ce
+    // qui empeche deux personnes de prendre la meme case.
     if(_centralOnline === false) {
-      showSuccess('Centrale hors-ligne', 'Reessayez sous peu');
+      showSuccess('Serveur de l\'immeuble injoignable', 'Reessayez sous peu');
       probeCentralHealth();
       return;
     }
     if(!lunchSession?.token || !lunchSession?.profile?.id) {
-      showSuccess('Session requise', 'Reconnectez-vous pour debiter via la centrale');
+      showSuccess('Session requise', 'Reconnectez-vous');
       return;
     }
-    if(!_balanceOps) {
-      showSuccess('Module debit indisponible', 'Rechargez la page');
-      return;
-    }
-    const debit = await _balanceOps.lunchPurchase({
-      machine_id:      MACHINE_ID,
-      amount:          price,
-      idempotency_key: idemKey,
-      dependent_id:    lunchSelectedPerson?.depId || null,
-      slot_id:         slotDbId == null ? null : String(slotDbId),
-      buyer_name:      buyer
+    const achat = await lunchRpc('lunch_acheter', {
+      p_machine_id: MACHINE_ID,
+      p_slot_num:   slotId,
+      p_dep_id:     lunchSelectedPerson?.depId || null,
+      p_buyer_name: buyer,
+      p_cle:        price > 0 ? idemKey : null
     });
-    if(debit && debit.queued) {
-      // Le reseau a flanche entre le probe (OK) et le POST. On refuse
-      // pour ne pas dispatcher le robot tant que central n'a pas confirme.
-      //
-      // L'op mise en file ne sert alors a rien : aucune reservation n'a
-      // ete prise, aucun robot ne partira, aucun plat ne sera livre. La
-      // laisser dans l'outbox la ferait partir au retour du reseau et
-      // debiterait le locataire pour un repas qu'il n'a jamais eu. On la
-      // retire donc pour de bon — l'ancienne ligne annoncait ce retrait
-      // mais n'ecrivait qu'un avertissement dans la console.
-      var retiree = false;
-      try {
-        retiree = !!(_balanceOps.cancelQueued && _balanceOps.cancelQueued(debit.queueId));
-      } catch(_) {}
-      if(!retiree) {
-        // Un kiosque servi depuis une version anterieure de balanceOps.js
-        // n'a pas cancelQueued. Mieux vaut le dire que de le taire.
-        console.error('[confirmReservation] pre-debit queued NON retire de l\'outbox '
-                    + '— risque de debit sans repas. queueId=', debit.queueId);
-      }
-      showSuccess('Reseau instable — reessayez', 'Aucun robot dispatche');
+    if(!achat.ok) {
+      const err = achat.error || 'UNKNOWN';
+      if(/SOLDE_INSUFFISANT/.test(err))      showSuccess('✗ Solde insuffisant', '');
+      else if(/CASE_VIDE/.test(err))         { showSuccess('✗ Case déjà prise', ''); loadFromSupabase(); }
+      else if(achat.status === 401 || /JWT|SESSION_REQUISE/.test(err)) showSuccess('Session expiree', 'Reconnectez-vous');
+      else                                    showSuccess('✗ Echec de l\'achat', err);
       return;
     }
-    if(!debit || !debit.ok) {
-      const errCode = (debit && debit.error) || 'UNKNOWN';
-      if(debit && debit.status === 402)      showSuccess('✗ Solde insuffisant', '');
-      else if(debit && debit.status === 401) showSuccess('Session expiree', 'Reconnectez-vous');
-      else                                    showSuccess('✗ Echec debit', errCode);
-      return;
-    }
-    // Solde maj opportuniste (post-debit). Pour un dependant, le solde
-    // affiche dans la topbar reste celui du resident principal.
-    if(typeof debit.virtual_balance === 'number' && !lunchSelectedPerson?.depId) {
-      _lastBalance = debit.virtual_balance;
+    var achatId = achat.data && achat.data.achat_id;
+    if(achat.data && typeof achat.data.virtual_balance === 'number' && !lunchSelectedPerson?.depId) {
+      _lastBalance = achat.data.virtual_balance;
     }
   }
 
-  // A partir d'ici : le debit central est confirme (ou price=0). On peut
+  // A partir d'ici : l'achat est confirme en base (ou price=0). On peut
   // reserver le slot, persister, et dispatcher le robot. Tout echec phy-
   // sique ulterieur (cancelPickup) declenchera un refund automatique.
   if(state.boxCount > 0) state.boxCount--;
@@ -4247,7 +4226,7 @@ async function confirmReservation() {
   slot.expDate = '';
 
   saveState();
-  if(NET_MODE) saveSlotToSupabase(slot);
+  // La case est deja videe en base par lunch_acheter.
   // La trace d'un retrait gratuit s'ecrit desormais a confirmPickup, pas
   // ici. Un article payant est pre-debite avant le dispatch parce que de
   // l'argent est en jeu, et une annulation le rembourse. Un article
@@ -4283,7 +4262,9 @@ async function confirmReservation() {
     // True si un pre-debit a effectivement ete confirme par central. Sert
     // a cancelPickup pour decider de refund ou non (les slots gratuits
     // n'ont pas a etre refundes).
-    debitedAtReservation: (price > 0)
+    debitedAtReservation: (price > 0),
+    // Achat en base a rembourser si le robot ne livre pas.
+    achatId: (typeof achatId !== 'undefined') ? achatId : null
   });
 
   showSuccess(t(price > 0 ? 'successMsg' : 'takeMsg', buyer),
@@ -4346,14 +4327,25 @@ function pinKey(k) {
   document.getElementById('pin-display').textContent = stars.trim() || '____';
 }
 
-function checkPin() {
-  if(pinBuffer === state.pin) {
+async function checkPin() {
+  // Hors reseau (kiosque local ou demonstration), le PIN est celui de
+  // l'etat local. Avec une machine, c'est la base qui le verifie.
+  let valide = false, bloque = false;
+  if(NET_MODE) {
+    const r = await lunchRpc('lunch_pin_valide', { p_machine_id: MACHINE_ID, p_pin: pinBuffer });
+    valide = r.ok && r.data === 'ok';
+    bloque = r.ok && r.data === 'bloque';
+  } else {
+    valide = (pinBuffer === state.pin);
+  }
+  if(valide) {
+    if(NET_MODE) _adminPin = pinBuffer;
     pinBuffer = '';
     document.getElementById('pin-display').textContent = '____';
     document.getElementById('pin-error').textContent = '';
     showScreen('screen-admin');
   } else {
-    document.getElementById('pin-error').textContent = t('pinError');
+    document.getElementById('pin-error').textContent = bloque ? 'Trop d\'essais — réessayez dans 10 minutes' : t('pinError');
     pinBuffer = '';
     document.getElementById('pin-display').textContent = '____';
   }
@@ -4745,18 +4737,14 @@ async function saveMenuToSupabase(menu) {
   };
   try {
     // UPSERT via Prefer: resolution=merge-duplicates (ou on_conflict sur id)
-    await sbFetch('lunch_menus?on_conflict=id', {
-      method: 'POST',
-      headers: { 'Prefer': 'resolution=merge-duplicates,return=minimal' },
-      body: JSON.stringify(body)
-    });
+    await lunchEcrire('menu', body);
   } catch(err) { console.error('saveMenuToSupabase error:', err); }
 }
 
 async function deleteMenuFromSupabase(menuId) {
   if(!NET_MODE) return;
   try {
-    await sbFetch('lunch_menus?id=eq.' + encodeURIComponent(menuId), { method: 'DELETE' });
+    await lunchEcrire('menu_supprimer', { id: menuId });
   } catch(err) { console.error('deleteMenuFromSupabase error:', err); }
 }
 
@@ -5452,6 +5440,7 @@ function savePin() {
     state.pin=val;
     saveState();
     saveMachineSettingsToSupabase({ pin: val });
+    if(NET_MODE && _adminPin) _adminPin = val;
     document.getElementById('new-pin').value='';
     flashSave();
   }
@@ -5904,27 +5893,19 @@ window.gantryWaitingPickup = false;
     // pour qu'un cancelPickup rejoue par l'outbox ne refund pas en double.
     // Si le refund echoue ou queue, l'outbox prendra le relais ; on ne
     // bloque pas le retour physique du plateau pour autant.
-    if(job.debitedAtReservation && job.userId && job.idempotencyKey && _balanceOps && NET_MODE) {
+    // Remboursement en base (lunch_rembourser) : une seule fois par achat,
+    // et la case retrouve son contenu. Avec le jeton capture a l'achat.
+    if(job.debitedAtReservation && job.achatId && NET_MODE) {
       try {
-        var refund = await _balanceOps.refund({
-          amount:          Number(job.price) || 0,
-          type:            'lunch_cancel_refund',
-          description:     'Annulation cueillette #' + job.slotId,
-          reference_id:    job.idempotencyKey,
-          reference_type:  'lunch_purchase',
-          idempotency_key: 'lunch:refund:' + job.idempotencyKey,
-          dependent_id:    job.depId || null
-        });
+        var refund = await lunchRpc('lunch_rembourser', { p_achat_id: job.achatId }, job.token);
         if(refund && refund.ok) {
-          console.log('[cancelPickup] refund OK | tx=', refund.transaction_id, '| amount=', job.price);
-          if(typeof refund.virtual_balance === 'number' && !job.depId) {
-            _lastBalance = refund.virtual_balance;
+          console.log('[cancelPickup] refund OK | achat=', job.achatId, '| amount=', job.price);
+          if(refund.data && typeof refund.data.virtual_balance === 'number' && !job.depId) {
+            _lastBalance = refund.data.virtual_balance;
           }
           if(typeof refreshHeaderBalance === 'function') refreshHeaderBalance();
-        } else if(refund && refund.queued) {
-          console.warn('[cancelPickup] refund MIS EN ATTENTE (outbox) | queueId=', refund.queueId);
         } else {
-          var refundErr = (refund && (refund.error || ('HTTP_'+refund.status))) || 'UNKNOWN';
+          var refundErr = (refund && refund.error) || 'UNKNOWN';
           console.error('[cancelPickup] REFUND ECHOUE — intervention admin necessaire:', refundErr, refund);
           if(typeof showSuccess === 'function') showSuccess('⚠ Refund echoue — voir admin', refundErr);
         }
