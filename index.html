@@ -3807,6 +3807,30 @@ async function qFetch(path, opts) {
   return ct.includes('json') ? res.json() : null;
 }
 
+// Lit ET consomme la session one-shot creee par CoHabitat (usage unique).
+// lunch_session_prendre (CoHabitat sql/042) la renvoie et la supprime en
+// une seule operation, sur son id seulement : la cle anon ne peut plus
+// lister les sessions (elles portent le jeton du resident). Repli sur
+// l'ancienne lecture directe tant que la migration n'est pas appliquee.
+let sessionPriseParRpc = false;
+async function prendreSessionCohabitat(sessionId) {
+  try {
+    const rows = await qFetch('rpc/lunch_session_prendre', {
+      method: 'POST',
+      body: JSON.stringify({ p_id: sessionId })
+    });
+    sessionPriseParRpc = true;
+    return rows;
+  } catch(e) {
+    // Fonction absente (base pas encore migree) : ancienne methode.
+    if(/PGRST202|Could not find the function|404/.test(String(e && e.message || e))) {
+      sessionPriseParRpc = false;
+      return qFetch('lunch_sessions?id=eq.' + encodeURIComponent(sessionId) + '&select=*');
+    }
+    throw e;
+  }
+}
+
 // Session en mémoire (pas de localStorage — kiosque partagé)
 let lunchSession = null;   // { profile, dependents, token }
 let lunchSelectedPerson = null; // { name, unit, depId|null }
@@ -5552,7 +5576,7 @@ updateAdminBtn();
     let lastErr = null;
     for(let attempt = 0; attempt < 20; attempt++) {
       try {
-        rows = await qFetch('lunch_sessions?id=eq.' + sessionId + '&select=*');
+        rows = await prendreSessionCohabitat(sessionId);
         if(rows && rows.length) break;
       } catch(e) {
         lastErr = e;
@@ -5577,7 +5601,7 @@ updateAdminBtn();
     // perdrait le token sans qu'on l'ait utilise.
     const accessToken = sess.access_token || null;
     const centralFlag = sess.finance_central_enabled === true;
-    await qFetch('lunch_sessions?id=eq.' + sessionId, { method: 'DELETE' });
+    if(!sessionPriseParRpc) await qFetch('lunch_sessions?id=eq.' + sessionId, { method: 'DELETE' });
 
     // Construire le profil depuis la session
     const profile = {
