@@ -3572,81 +3572,39 @@ let _queuePollTimer = null;
 
 const QUEUE_ACTIVE_MINUTES = 10; // durée max d'une session active
 
+// La file n'est plus ouverte a la cle anon (CoHabitat sql/044) : le
+// kiosque agit avec la connexion du resident (lunchSession.token), et
+// toute ecriture passe par une fonction de la base, qui fixe le rang et
+// reprend nom et logement du profil.
 async function queueJoin() {
   if(!NET_MODE || !lunchSession) return;
-  const profile = lunchSession.profile;
-  const now     = new Date();
-  const expires = new Date(now.getTime() + QUEUE_ACTIVE_MINUTES * 60000).toISOString();
-  console.log('[queueJoin] user:', profile.full_name, 'machine:', MACHINE_ID);
-
-  try {
-    const existing = await qFetch(
-      'lunch_queue?machine_id=eq.' + MACHINE_ID + '&user_id=eq.' + profile.id + '&select=*'
-    );
-    console.log('[queueJoin] existing:', existing);
-    if(existing && existing.length) {
-      await qFetch('lunch_queue?id=eq.' + existing[0].id, {
-        method: 'PATCH',
-        body: JSON.stringify({ expires_at: expires })
-      });
-      _queueEntry = { ...existing[0], expires_at: expires };
-    } else {
-      const queue = await qFetch(
-        'lunch_queue?machine_id=eq.' + MACHINE_ID + '&order=joined_at&select=*'
-      );
-      const active = (queue || []).filter(function(e) {
-        return e.status === 'active' && new Date(e.expires_at) > new Date();
-      });
-      const status = active.length === 0 ? 'active' : 'waiting';
-      console.log('[queueJoin] inserting with status:', status);
-      const rows = await qFetch('lunch_queue', {
-        method: 'POST',
-        body: JSON.stringify({
-          machine_id: MACHINE_ID,
-          user_id:    profile.id,
-          full_name:  profile.full_name || '',
-          unit:       profile.unit || '',
-          joined_at:  now.toISOString(),
-          status:     status,
-          expires_at: expires
-        })
-      });
-      console.log('[queueJoin] inserted rows:', rows);
-      _queueEntry = rows && rows[0];
-    }
-    console.log('[queueJoin] _queueEntry set:', _queueEntry);
-    queueSubscribe();
-    queueRender();
-  } catch(err) {
-    console.error('[queueJoin] error:', err.message || err);
-  }
+  const jeton = _jetonSession();
+  if(!jeton) { console.warn('[queueJoin] pas de connexion — file indisponible'); return; }
+  console.log('[queueJoin] user:', lunchSession.profile.full_name, 'machine:', MACHINE_ID);
+  const r = await lunchRpc('lunch_file_rejoindre', { p_machine_id: MACHINE_ID }, jeton);
+  if(!r.ok) { console.error('[queueJoin] error:', r.error); return; }
+  _queueEntry = Array.isArray(r.data) ? r.data[0] : r.data;
+  console.log('[queueJoin] _queueEntry set:', _queueEntry);
+  queueSubscribe();
+  queueRender();
 }
 
 async function queueLeave() {
   if(!_queueEntry) return;
-  try {
-    await qFetch('lunch_queue?id=eq.' + _queueEntry.id, { method: 'DELETE' });
-    await queuePromoteNext();
-  } catch(err) { console.error('queueLeave:', err); }
+  // Jeton lu tout de suite : l'appelant efface la session juste apres.
+  const jeton = _jetonSession();
+  const r = await lunchRpc('lunch_file_quitter', { p_machine_id: MACHINE_ID }, jeton);
+  if(!r.ok) console.error('queueLeave:', r.error);
   _queueEntry = null;
   queueUnsubscribe();
   queueRender();
 }
 
+// Places expirees retirees, suivant promu : la base s'en charge.
 async function queuePromoteNext() {
-  if(!MACHINE_ID) return;
-  try {
-    const waiting = await qFetch(
-      'lunch_queue?machine_id=eq.' + MACHINE_ID + '&status=eq.waiting&order=joined_at&limit=1&select=*'
-    );
-    if(waiting && waiting.length) {
-      const expires = new Date(Date.now() + QUEUE_ACTIVE_MINUTES * 60000).toISOString();
-      await qFetch('lunch_queue?id=eq.' + waiting[0].id, {
-        method: 'PATCH',
-        body: JSON.stringify({ status: 'active', expires_at: expires })
-      });
-    }
-  } catch(err) { console.error('queuePromoteNext:', err); }
+  if(!MACHINE_ID || !_jetonSession()) return;
+  const r = await lunchRpc('lunch_file_avancer', { p_machine_id: MACHINE_ID });
+  if(!r.ok) console.error('queuePromoteNext:', r.error);
 }
 
 function queueSubscribe() {
@@ -3662,13 +3620,7 @@ function queueUnsubscribe() {
 async function queuePoll() {
   if(!_queueEntry || !NET_MODE) return;
   try {
-    const expired = await qFetch(
-      'lunch_queue?machine_id=eq.' + MACHINE_ID + '&expires_at=lt.' + new Date().toISOString() + '&select=id,status'
-    );
-    for(const e of (expired || [])) {
-      await qFetch('lunch_queue?id=eq.' + e.id, { method: 'DELETE' });
-      if(e.status === 'active') await queuePromoteNext();
-    }
+    await queuePromoteNext();
     const rows = await qFetch('lunch_queue?id=eq.' + _queueEntry.id + '&select=*');
     if(!rows || !rows.length) {
       _queueEntry = null;
@@ -3792,7 +3744,9 @@ async function qFetch(path, opts) {
     ...opts,
     headers: {
       'apikey': COHAB_ANON,
-      'Authorization': 'Bearer ' + COHAB_ANON,
+      // Connexion du resident s'il y en a une : la file n'est plus lisible
+      // avec la cle anon (CoHabitat sql/044).
+      'Authorization': 'Bearer ' + (_jetonSession() || COHAB_ANON),
       'Content-Type': 'application/json',
       'Prefer': 'return=representation',
       ...(opts && opts.headers)
@@ -5646,15 +5600,16 @@ updateAdminBtn();
 // part meme apres unload, contrairement a un fetch normal qui serait abandonne.
 function _kioskCleanupOnUnload() {
   try {
-    if(_queueEntry && _queueEntry.id) {
-      fetch(COHAB_URL + '/rest/v1/lunch_queue?id=eq.' + encodeURIComponent(_queueEntry.id), {
-        method: 'DELETE',
+    if(_queueEntry && _jetonSession()) {
+      fetch(COHAB_URL + '/rest/v1/rpc/lunch_file_quitter', {
+        method: 'POST',
         keepalive: true,
         headers: {
           'apikey': COHAB_ANON,
-          'Authorization': 'Bearer ' + COHAB_ANON,
+          'Authorization': 'Bearer ' + _jetonSession(),
           'Content-Type': 'application/json'
-        }
+        },
+        body: JSON.stringify({ p_machine_id: MACHINE_ID })
       });
     }
     if(window.opener && !window.opener.closed) {
